@@ -83,6 +83,48 @@ Responses:
 - `404`: Workflow Number not found
 - `422`: invalid field or progress/feedback key
 
+### Replace all workflow comments
+
+```http
+PUT /api/external/workflows/{workflow_number}/comments
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+This endpoint writes the complete current comment snapshot for one workflow. Each
+successful request atomically replaces the comments previously stored for that
+workflow. Send an empty `comments` array to clear the snapshot.
+
+```json
+{
+  "comments": [
+    {
+      "external_id": "aconex-comment-1042",
+      "author": "GDS reviewer",
+      "body": "The complete review comment, without notification-length truncation.",
+      "commented_at": "2026-07-24T14:47:00"
+    },
+    {
+      "external_id": "aconex-comment-1043",
+      "author": "UTIBER reviewer",
+      "body": "A second complete comment.",
+      "commented_at": "2026-07-24T15:02:00"
+    }
+  ]
+}
+```
+
+`external_id`, `author`, and `commented_at` are optional. `body` is required and
+supports up to 1,000,000 characters. Up to 1,000 comments may be written per
+snapshot. The response contains the saved comments in request order.
+
+Responses:
+
+- `200`: complete comment snapshot replaced
+- `401`: missing or invalid API key
+- `404`: Workflow Number not found
+- `422`: invalid comment payload
+
 ## Notifications
 
 | Method | Endpoint | Description |
@@ -110,6 +152,7 @@ The former Workflow Status field is removed. Feedback is now the workflow feedba
 | `POST` | `/api/packages` | Create a document; blank Document Number becomes a unique `DRAFT-*` number |
 | `POST` | `/api/packages/{id}/duplicate` | Duplicate metadata using a unique `-COPY` Document Number |
 | `GET` | `/api/packages/{id}` | Read complete document metadata |
+| `GET` | `/api/packages/{id}/workflow-comments` | Read the complete workflow comment snapshot |
 | `PATCH` | `/api/packages/{id}` | Update supplied fields |
 | `DELETE` | `/api/packages/{id}` | Delete a document |
 | `POST` | `/api/packages/reorder` | Persist row ordering |

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Ban, Calendar, FileStack, FileText, Hash, MessageSquareText, OctagonX, Paperclip, RefreshCw, Save, UserRound, X } from 'lucide-react'
-import { getApiError, notificationsApi } from '../../lib/api'
+import { getApiError, notificationsApi, packagesApi } from '../../lib/api'
 import type { ColumnConfig, Package, PackageInput, WorkflowConfig } from '../../types/package'
 import { StatusBadge } from '../common/StatusBadge'
 import { FeedbackStatus } from './FeedbackStatus'
@@ -11,6 +11,12 @@ import { SubmissionSlider } from './SubmissionSlider'
 export function PackageDrawer({item,configs,workflowConfig,saving,onUpdate,onClose}:{item:Package|null;configs:ColumnConfig[];workflowConfig:WorkflowConfig;saving:boolean;onUpdate:(data:Partial<PackageInput>)=>void;onClose:()=>void}){
   const [notes,setNotes]=useState('')
   const [sliderValue,setSliderValue]=useState(0)
+  const commentsQuery=useQuery({
+    queryKey:['workflow-comments',item?.id],
+    queryFn:()=>packagesApi.listWorkflowComments(item!.id),
+    enabled:!!item,
+    refetchInterval:item?30_000:false,
+  })
   const feedbackQuery=useQuery({
     queryKey:['notifications','workflow-feedback',item?.id],
     queryFn:()=>notificationsApi.listWorkflowFeedback(item!.id),
@@ -19,6 +25,11 @@ export function PackageDrawer({item,configs,workflowConfig,saving,onUpdate,onClo
   })
   useEffect(()=>{setNotes(item?.notes||'');setSliderValue(item?workflowConfig.submission_steps.filter(step=>item.submission_progress[step]).length:0)},[item,workflowConfig.submission_steps])
   if(!item)return null
+  const comments=commentsQuery.data?.items||[]
+  const legacyFeedback=feedbackQuery.data?.items||[]
+  const feedbackLoading=commentsQuery.isLoading&&feedbackQuery.isLoading
+  const feedbackError=commentsQuery.isError&&feedbackQuery.isError
+  const feedbackFetching=commentsQuery.isFetching||feedbackQuery.isFetching
   const typeColor=configs.find(config=>config.field_name==='document_type')?.option_colors[item.document_type]
   const commitSlider=(value:number)=>onUpdate({submission_progress:Object.fromEntries(workflowConfig.submission_steps.map((step,index)=>[step,index<value])) as PackageInput['submission_progress']})
   return <div className="drawer-layer" role="dialog" aria-modal="true" aria-label="Document details"><div className="drawer-backdrop" onClick={onClose}/><aside className="detail-drawer"><header><div><span className="eyebrow">Document details</span><h2>{item.document_number}</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header><div className="drawer-body">
@@ -34,11 +45,12 @@ export function PackageDrawer({item,configs,workflowConfig,saving,onUpdate,onClo
       <div className="section-heading"><h4>External feedback</h4><span>Feedback Status</span></div>
       <FeedbackStatus item={item} reviewers={workflowConfig.feedback_reviewers} statusLabels={workflowConfig.feedback_status_labels} statusColors={workflowConfig.feedback_status_colors}/>
       <div className="workflow-feedback-response">
-        <div className="workflow-feedback-response-heading"><span><MessageSquareText/>Workflow response</span>{feedbackQuery.isFetching&&!feedbackQuery.isLoading&&<RefreshCw className="spin"/>}</div>
-        {feedbackQuery.isLoading?<div className="workflow-feedback-state"><RefreshCw className="spin"/>Loading feedback…</div>
-          :feedbackQuery.isError?<div className="workflow-feedback-state error">{getApiError(feedbackQuery.error)} <button type="button" onClick={()=>feedbackQuery.refetch()}>Retry</button></div>
-          :!feedbackQuery.data?.items.length?<div className="workflow-feedback-state">No workflow feedback received yet.</div>
-          :<div className="workflow-feedback-list">{feedbackQuery.data.items.map(feedback=><article key={feedback.id}><p>{feedback.message}</p><time dateTime={feedback.created_at}>{format(new Date(feedback.created_at),'MMM d, yyyy · HH:mm')}</time></article>)}</div>}
+        <div className="workflow-feedback-response-heading"><span><MessageSquareText/>Workflow response</span>{feedbackFetching&&!feedbackLoading&&<RefreshCw className="spin"/>}</div>
+        {feedbackLoading?<div className="workflow-feedback-state"><RefreshCw className="spin"/>Loading feedback…</div>
+          :feedbackError?<div className="workflow-feedback-state error">{getApiError(commentsQuery.error||feedbackQuery.error)} <button type="button" onClick={()=>{commentsQuery.refetch();feedbackQuery.refetch()}}>Retry</button></div>
+          :comments.length?<div className="workflow-feedback-list">{comments.map(comment=>{const timestamp=comment.commented_at||comment.synced_at;return <article key={comment.id}>{comment.author&&<strong>{comment.author}</strong>}<p>{comment.body}</p><time dateTime={timestamp}>{format(new Date(timestamp),'MMM d, yyyy · HH:mm')}</time></article>})}</div>
+          :legacyFeedback.length?<div className="workflow-feedback-list">{legacyFeedback.map(feedback=><article key={feedback.id}><p>{feedback.message}</p><time dateTime={feedback.created_at}>{format(new Date(feedback.created_at),'MMM d, yyyy · HH:mm')}</time></article>)}</div>
+          :<div className="workflow-feedback-state">No workflow feedback received yet.</div>}
       </div>
     </section>
   </div></aside></div>

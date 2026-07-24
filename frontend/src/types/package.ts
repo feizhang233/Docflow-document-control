@@ -112,3 +112,20 @@ export interface NotificationList {
   items: WorkflowNotification[]
   unread_count: number
 }
+
+export interface WorkflowComment {
+  id: number
+  package_id: number
+  workflow_number: string
+  external_id: string | null
+  author: string | null
+  body: string
+  commented_at: string | null
+  order_index: number
+  synced_at: string
+}
+
+export interface WorkflowCommentList {
+  items: WorkflowComment[]
+  total: number
+}

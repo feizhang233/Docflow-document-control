@@ -23,7 +23,7 @@ class ExternalWorkflowUpdate(BaseModel):
     feedback: dict[str, bool] | None = None
     feedback_status: dict[str, str] | None = None
     terminate_workflow: bool | None = None
-    message: str | None = Field(default=None, max_length=500)
+    message: str | None = Field(default=None, max_length=1_000_000)
     @field_validator("feedback_status")
     @classmethod
     def validate_feedback_status(cls, value):

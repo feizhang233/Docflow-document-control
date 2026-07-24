@@ -21,7 +21,7 @@ def describe_workflow_update(*, feedback_status: dict[str, str] | None = None, f
 
 def combine_update_message(custom_message: str | None, details: str) -> str:
     message = f"{custom_message.strip()} · {details}" if custom_message and custom_message.strip() else details
-    return message[:500]
+    return message
 
 class NotificationService:
     def __init__(self, db: Session): self.db = db

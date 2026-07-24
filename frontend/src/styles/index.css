@@ -158,9 +158,13 @@
 .workflow-feedback-response-heading>svg{color:#8a96a8}
 .workflow-feedback-list{display:flex;flex-direction:column;gap:7px;max-height:260px;overflow-y:auto;overscroll-behavior:contain}
 .workflow-feedback-list article{padding:10px 11px;border:1px solid #e2e7ef;border-radius:8px;background:#f7f9fc}
-.workflow-feedback-list p{margin:0;color:#34435c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.workflow-feedback-list article>strong{display:block;margin-bottom:5px;color:#293a56;font-size:10px}
+.workflow-feedback-list p{margin:0;color:#34435c;font-size:11px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
 .workflow-feedback-list time{display:block;margin-top:6px;color:#8a96a8;font-size:9px}
 .workflow-feedback-state{min-height:48px;padding:11px;border:1px dashed #dce2eb;border-radius:8px;background:#fafbfc;color:#8290a3;font-size:10px;display:flex;align-items:center;gap:7px}
 .workflow-feedback-state svg{width:14px}
 .workflow-feedback-state.error{color:#ad4550;border-color:#edcdd1;background:#fffafb}
 .workflow-feedback-state button{margin-left:auto;border:0;background:transparent;color:#315fc7;font-size:10px;font-weight:700}
+
+/* Notifications are summaries; the document drawer keeps the complete response. */
+.notification-group>button:not(.notification-group-heading) p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden}

@@ -6,8 +6,10 @@ from app.db.session import get_db
 from app.repositories.package_repository import PackageRepository
 from app.schemas.notification import ExternalWorkflowUpdate
 from app.schemas.package import PackageRead
+from app.schemas.workflow_comment import WorkflowCommentList, WorkflowCommentsWrite
 from app.services.notification_service import NotificationService, combine_update_message, describe_submission_progress, describe_workflow_update
 from app.services.settings_service import SettingsService
+from app.services.workflow_comment_service import WorkflowCommentService
 
 router = APIRouter(prefix="/external", tags=["external automation"])
 
@@ -54,3 +56,20 @@ def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Sess
             )),
         )
     return item
+
+
+@router.put(
+    "/workflows/{workflow_number}/comments",
+    response_model=WorkflowCommentList,
+    dependencies=[Depends(verify_api_key)],
+)
+def replace_workflow_comments(
+    workflow_number: str,
+    data: WorkflowCommentsWrite,
+    db: Session = Depends(get_db),
+):
+    package = PackageRepository(db).get_by_workflow_number(workflow_number)
+    if not package:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    items = WorkflowCommentService(db).replace_for_package(package, data.comments)
+    return WorkflowCommentList(items=items, total=len(items))

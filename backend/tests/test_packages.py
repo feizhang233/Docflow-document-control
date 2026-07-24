@@ -231,6 +231,85 @@ def test_external_workflow_update_creates_notification(client):
     assert client.delete("/api/notifications").status_code == 204
     assert client.get("/api/notifications").json()["items"] == []
 
+
+def test_external_workflow_update_preserves_long_message(client):
+    client.post("/api/packages", json=payload())
+    long_message = "Complete workflow response: " + ("technical comment " * 80)
+    response = client.patch(
+        "/api/external/workflows/WF-001",
+        headers={"X-API-Key":"test-external-key"},
+        json={"feedback_status":{"UTIBER":"B"}, "message":long_message},
+    )
+    assert response.status_code == 200
+    notification = client.get("/api/notifications").json()["items"][0]
+    assert notification["message"].startswith(long_message)
+    assert len(notification["message"]) > 500
+
+
+def test_replace_and_read_complete_workflow_comments(client):
+    created = client.post("/api/packages", json=payload()).json()
+    endpoint = "/api/external/workflows/WF-001/comments"
+    long_body = "Full comment:\n" + ("The complete technical response remains visible. " * 20)
+    comments = {
+        "comments": [
+            {
+                "external_id": "comment-001",
+                "author": "GDS reviewer",
+                "body": long_body,
+                "commented_at": "2026-07-24T14:47:00",
+            },
+            {
+                "external_id": "comment-002",
+                "author": "UTIBER reviewer",
+                "body": "Second comment without truncation.",
+                "commented_at": "2026-07-24T15:02:00",
+            },
+        ]
+    }
+    denied = client.put(
+        endpoint,
+        headers={"X-API-Key":"wrong"},
+        json=comments,
+    )
+    assert denied.status_code == 401
+    written = client.put(
+        endpoint,
+        headers={"X-API-Key":"test-external-key"},
+        json=comments,
+    )
+    assert written.status_code == 200
+    assert written.json()["total"] == 2
+    assert written.json()["items"][0]["body"] == long_body
+    assert len(written.json()["items"][0]["body"]) > 500
+    assert written.json()["items"][1]["order_index"] == 1
+
+    read = client.get(
+        f"/api/packages/{created['id']}/workflow-comments"
+    )
+    assert read.status_code == 200
+    assert read.json()["items"] == written.json()["items"]
+
+    replacement = client.put(
+        endpoint,
+        headers={"X-API-Key":"test-external-key"},
+        json={"comments":[{"body":"Latest complete snapshot."}]},
+    )
+    assert replacement.status_code == 200
+    assert replacement.json()["total"] == 1
+    assert replacement.json()["items"][0]["body"] == "Latest complete snapshot."
+    assert client.get(
+        f"/api/packages/{created['id']}/workflow-comments"
+    ).json()["total"] == 1
+
+    cleared = client.put(
+        endpoint,
+        headers={"X-API-Key":"test-external-key"},
+        json={"comments":[]},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json() == {"items":[], "total":0}
+
+
 def test_submission_and_feedback_updates_create_separate_notification_categories(client):
     created = client.post("/api/packages", json=payload()).json()
     progress = dict(created["submission_progress"])

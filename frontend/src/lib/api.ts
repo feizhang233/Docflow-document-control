@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, WorkflowConfig } from '../types/package'
+import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
 const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api', timeout: 12_000 })
 
@@ -18,6 +18,7 @@ interface ListParams {
 export const packagesApi = {
   list: async (params: ListParams) => (await client.get<PackageListResponse>('/packages', { params })).data,
   get: async (id: number) => (await client.get<Package>(`/packages/${id}`)).data,
+  listWorkflowComments: async (id: number) => (await client.get<WorkflowCommentList>(`/packages/${id}/workflow-comments`)).data,
   listAll: async (params: Omit<ListParams,'page'|'page_size'> = {}) => {
     const first=(await client.get<PackageListResponse>('/packages',{params:{...params,page:1,page_size:200}})).data
     if(first.items.length>=first.total)return first

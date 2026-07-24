@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.repositories.package_repository import PackageRepository
 from app.schemas.package import PackageCreate, PackageList, PackageRead, PackageUpdate, ReorderRequest
+from app.schemas.workflow_comment import WorkflowCommentList
 from app.services.package_service import PackageService
+from app.services.workflow_comment_service import WorkflowCommentService
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 
@@ -15,6 +17,11 @@ def list_packages(period: Literal["week","month","year","all"]="week", search: s
 
 @router.get("/{package_id}", response_model=PackageRead)
 def get_package(package_id:int, db:Session=Depends(get_db)): return PackageService(db).require(package_id)
+@router.get("/{package_id}/workflow-comments", response_model=WorkflowCommentList)
+def list_workflow_comments(package_id:int, db:Session=Depends(get_db)):
+    PackageService(db).require(package_id)
+    items=WorkflowCommentService(db).list_for_package(package_id)
+    return WorkflowCommentList(items=items,total=len(items))
 @router.post("", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
 def create_package(data:PackageCreate, db:Session=Depends(get_db)): return PackageService(db).create(data)
 @router.post("/{package_id}/duplicate", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
