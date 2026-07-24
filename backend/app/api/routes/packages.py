@@ -19,9 +19,9 @@ def list_packages(period: Literal["week","month","year","all"]="week", search: s
 def get_package(package_id:int, db:Session=Depends(get_db)): return PackageService(db).require(package_id)
 @router.get("/{package_id}/workflow-comments", response_model=WorkflowCommentList)
 def list_workflow_comments(package_id:int, db:Session=Depends(get_db)):
-    PackageService(db).require(package_id)
-    items=WorkflowCommentService(db).list_for_package(package_id)
-    return WorkflowCommentList(items=items,total=len(items))
+    package = PackageService(db).require(package_id)
+    items = WorkflowCommentService(db).list_for_package(package)
+    return WorkflowCommentList(items=items, total=len(items))
 @router.post("", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
 def create_package(data:PackageCreate, db:Session=Depends(get_db)): return PackageService(db).create(data)
 @router.post("/{package_id}/duplicate", response_model=PackageRead, status_code=status.HTTP_201_CREATED)

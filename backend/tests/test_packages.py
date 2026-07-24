@@ -282,12 +282,22 @@ def test_replace_and_read_complete_workflow_comments(client):
     assert written.json()["items"][0]["body"] == long_body
     assert len(written.json()["items"][0]["body"]) > 500
     assert written.json()["items"][1]["order_index"] == 1
+    assert written.json()["items"][0]["workflow_number"] == "WF-001"
+    assert "package_id" not in written.json()["items"][0]
 
     read = client.get(
         f"/api/packages/{created['id']}/workflow-comments"
     )
     assert read.status_code == 200
     assert read.json()["items"] == written.json()["items"]
+
+    # Second package with the same workflow number shares the comments.
+    sibling_payload = payload("DOC-CIV-002")
+    sibling_payload["workflow_number"] = "WF-001"
+    sibling = client.post("/api/packages", json=sibling_payload).json()
+    sibling_read = client.get(f"/api/packages/{sibling['id']}/workflow-comments")
+    assert sibling_read.status_code == 200
+    assert sibling_read.json()["total"] == 2
 
     replacement = client.put(
         endpoint,
@@ -308,6 +318,87 @@ def test_replace_and_read_complete_workflow_comments(client):
     )
     assert cleared.status_code == 200
     assert cleared.json() == {"items":[], "total":0}
+
+
+def test_bulk_import_workflow_comments_by_workflow_number_only(client):
+    first = client.post("/api/packages", json=payload("DOC-BULK-1")).json()
+    second_payload = payload("DOC-BULK-2")
+    second_payload["workflow_number"] = "WF-002"
+    second = client.post("/api/packages", json=second_payload).json()
+    endpoint = "/api/external/workflow-comments"
+    body = {
+        "items": [
+            {
+                "workflow_number": "WF-001",
+                "comments": [
+                    {
+                        "external_id": "mail-100",
+                        "author": "Mr Reviewer",
+                        "body": "Complete Final Mail comment for WF-001.",
+                        "commented_at": "2026-07-24T10:00:00Z",
+                    }
+                ],
+            },
+            {
+                "workflow_number": "WF-002",
+                "comments": [
+                    {"body": "First comment on WF-002."},
+                    {"body": "Second comment on WF-002."},
+                ],
+            },
+            {
+                # No package exists for this workflow number; still imported.
+                "workflow_number": "WF-ORPHAN",
+                "comments": [{"body": "Stored by workflow number only."}],
+            },
+        ]
+    }
+
+    denied = client.put(endpoint, headers={"X-API-Key": "wrong"}, json=body)
+    assert denied.status_code == 401
+
+    response = client.put(
+        endpoint,
+        headers={"X-API-Key": "test-external-key"},
+        json=body,
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["imported"] == 3
+    assert "not_found" not in result
+    assert result["results"] == [
+        {"workflow_number": "WF-001", "status": "imported", "total": 1},
+        {"workflow_number": "WF-002", "status": "imported", "total": 2},
+        {"workflow_number": "WF-ORPHAN", "status": "imported", "total": 1},
+    ]
+
+    first_comments = client.get(
+        f"/api/packages/{first['id']}/workflow-comments"
+    ).json()
+    assert first_comments["total"] == 1
+    assert first_comments["items"][0]["body"] == "Complete Final Mail comment for WF-001."
+    assert first_comments["items"][0]["external_id"] == "mail-100"
+    assert first_comments["items"][0]["author"] == "Mr Reviewer"
+    assert first_comments["items"][0]["workflow_number"] == "WF-001"
+
+    second_comments = client.get(
+        f"/api/packages/{second['id']}/workflow-comments"
+    ).json()
+    assert second_comments["total"] == 2
+    assert [item["body"] for item in second_comments["items"]] == [
+        "First comment on WF-002.",
+        "Second comment on WF-002.",
+    ]
+
+    # Orphan workflow comments are stored and returned by the single-workflow API.
+    orphan = client.put(
+        "/api/external/workflows/WF-ORPHAN/comments",
+        headers={"X-API-Key": "test-external-key"},
+        json={"comments": [{"body": "Updated orphan comment."}]},
+    )
+    assert orphan.status_code == 200
+    assert orphan.json()["total"] == 1
+    assert orphan.json()["items"][0]["body"] == "Updated orphan comment."
 
 
 def test_submission_and_feedback_updates_create_separate_notification_categories(client):

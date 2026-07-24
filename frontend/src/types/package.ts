@@ -115,7 +115,6 @@ export interface NotificationList {
 
 export interface WorkflowComment {
   id: number
-  package_id: number
   workflow_number: string
   external_id: string | null
   author: string | null

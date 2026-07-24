@@ -91,9 +91,11 @@ X-API-Key: your-api-key
 Content-Type: application/json
 ```
 
-This endpoint writes the complete current comment snapshot for one workflow. Each
-successful request atomically replaces the comments previously stored for that
-workflow. Send an empty `comments` array to clear the snapshot.
+This endpoint writes the complete current comment snapshot for one workflow
+number. Matching is by workflow number only (not package/document name). A
+package does not need to exist first. Each successful request atomically
+replaces the comments previously stored for that workflow number. Send an empty
+`comments` array to clear the snapshot.
 
 ```json
 {
@@ -122,8 +124,72 @@ Responses:
 
 - `200`: complete comment snapshot replaced
 - `401`: missing or invalid API key
-- `404`: Workflow Number not found
 - `422`: invalid comment payload
+
+### Bulk import workflow comments
+
+```http
+PUT /api/external/workflow-comments
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+Import complete Final Mail comment snapshots for many workflows in one request.
+This is the preferred endpoint for Aconex SQLite → DocFlow comment synchronization.
+Each item atomically replaces the comments previously stored for that workflow
+number. Matching is by **workflow number only** — never by document number or
+package name. A package does not need to exist first; any document that uses the
+workflow number will read the same shared comment snapshot.
+
+Up to 5,000 workflow items may be sent per request. Each item may contain up to
+1,000 comments with the same field rules as the single-workflow endpoint.
+
+```json
+{
+  "items": [
+    {
+      "workflow_number": "WF-000527",
+      "comments": [
+        {
+          "external_id": "681130933",
+          "author": "Mr Slobodan Ivkovic",
+          "body": "The complete Final Mail review comment, without truncation.",
+          "commented_at": "2025-12-04T11:46:09.640Z"
+        }
+      ]
+    },
+    {
+      "workflow_number": "WF-000630",
+      "comments": [
+        {
+          "external_id": "681428335",
+          "author": "Mr Slobodan Ivkovic",
+          "body": "Another complete comment.",
+          "commented_at": "2026-01-21T08:13:23.630Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Example response:
+
+```json
+{
+  "imported": 2,
+  "results": [
+    {"workflow_number": "WF-000527", "status": "imported", "total": 1},
+    {"workflow_number": "WF-000630", "status": "imported", "total": 1}
+  ]
+}
+```
+
+Responses:
+
+- `200`: bulk import completed (see `imported` count)
+- `401`: missing or invalid API key
+- `422`: invalid payload
 
 ## Notifications
 
