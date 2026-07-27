@@ -168,3 +168,50 @@
 
 /* Notifications are summaries; the document drawer keeps the complete response. */
 .notification-group>button:not(.notification-group-heading) p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden}
+
+/* Row action menu: portal + fixed positioning so one-row tables no longer clip the popover. */
+.row-menu-popover{position:fixed;z-index:120;width:200px;background:white;border:1px solid #dfe4ec;border-radius:9px;box-shadow:0 14px 35px rgba(18,30,55,.18);padding:5px}
+.row-menu-popover button{width:100%;height:34px;border:0;background:white;border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 9px;font-size:11px;color:#48566d;text-align:left}
+.row-menu-popover button:hover{background:#f3f6fb;color:#2f5fc4}
+.row-menu-popover button.danger{color:#be3e4a}
+.row-menu-popover button.danger:hover{background:#fff1f2;color:#a92f3c}
+.row-menu-popover svg{width:14px}
+
+/* Multi-select mode */
+.secondary-button.active-select{color:#315fc7;border-color:#9eb4ec;background:#f2f6ff}
+.selection-bar{min-height:52px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e7edf7;background:linear-gradient(180deg,#f5f8ff,#eef3ff)}
+.selection-summary{display:flex;align-items:center;gap:8px;color:#4b5d7a;font-size:12px}
+.selection-summary strong{color:#27498f;font-size:13px}
+.selection-summary button{border:0;background:transparent;color:#3568ee;font-size:12px;font-weight:600;padding:0}
+.selection-summary button:hover{text-decoration:underline}
+.selection-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.selection-actions .secondary-button{height:34px;padding:0 12px;font-size:11px}
+.selection-actions .danger-button{color:#be3e4a;border-color:#efc4c9}
+.selection-actions .danger-button:hover{background:#fff1f2;border-color:#e7a8af}
+.selection-actions .secondary-button:disabled{opacity:.45;cursor:not-allowed}
+.bulk-more{position:relative}
+.bulk-more-popover{position:absolute;right:0;top:40px;width:210px;background:white;border:1px solid #dfe4ec;border-radius:9px;box-shadow:0 14px 35px rgba(18,30,55,.18);padding:5px;z-index:30}
+.bulk-more-popover button{width:100%;height:34px;border:0;background:white;border-radius:6px;display:flex;align-items:center;gap:8px;padding:0 9px;font-size:11px;color:#48566d;text-align:left}
+.bulk-more-popover button:hover{background:#f3f6fb;color:#2f5fc4}
+.bulk-more-popover svg{width:14px}
+.select-cell{width:42px!important;min-width:42px!important;padding-left:12px!important;padding-right:4px!important;text-align:center}
+.row-checkbox{position:relative;display:inline-grid;place-items:center;width:18px;height:18px;cursor:pointer}
+.row-checkbox input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.row-checkbox i{width:16px;height:16px;border:1.5px solid #b7c0cf;border-radius:4px;background:white;display:block}
+.row-checkbox input:checked+i{background:#3568ee;border-color:#3568ee;box-shadow:inset 0 0 0 2px white}
+.row-checkbox input:indeterminate+i{background:#3568ee;border-color:#3568ee}
+.row-checkbox input:indeterminate+i:after{content:'';display:block;width:8px;height:2px;background:white;margin:7px auto 0}
+.package-table tbody tr.row-selected{background:#f3f7ff}
+.package-table tbody tr.row-selected:hover{background:#ebf2ff}
+.bulk-selected-list{margin-bottom:16px;padding:12px 14px;border:1px solid #e2e8f2;border-radius:10px;background:#f7f9fc}
+.bulk-selected-list strong{display:block;font-size:12px;color:#2c3d5c;margin-bottom:6px}
+.bulk-selected-list>div{font-size:12px;color:#3f516f;line-height:1.45;word-break:break-word}
+.bulk-selected-list p{margin:8px 0 0;font-size:11px;color:#7d8a9d}
+.bulk-toggle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.bulk-toggle-grid label span{display:block;font-size:11px;color:#5e6c81;font-weight:600;margin-bottom:6px}
+.bulk-toggle-grid select{width:100%;height:40px;border:1px solid #dfe4eb;border-radius:7px;background:white;padding:0 10px;font-size:12px;color:#34435b}
+@media(max-width:760px){
+  .selection-bar{flex-direction:column;align-items:stretch}
+  .selection-actions{justify-content:flex-start}
+  .bulk-toggle-grid{grid-template-columns:1fr}
+}
