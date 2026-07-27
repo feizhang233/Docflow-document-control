@@ -210,6 +210,11 @@
 .bulk-toggle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .bulk-toggle-grid label span{display:block;font-size:11px;color:#5e6c81;font-weight:600;margin-bottom:6px}
 .bulk-toggle-grid select{width:100%;height:40px;border:1px solid #dfe4eb;border-radius:7px;background:white;padding:0 10px;font-size:12px;color:#34435b}
+.bulk-progress-section{margin:16px 0 0;padding:14px;border:1px solid #e2e8f2;border-radius:10px;background:#fafbfd}
+.bulk-progress-section legend{padding:0 4px;font-size:12px;font-weight:700;color:#2c3d5c}
+.bulk-progress-section .editor-switch-row{margin-bottom:12px}
+.bulk-progress-slider{padding:4px 2px 0}
+.bulk-progress-slider.disabled{opacity:.45;pointer-events:none}
 @media(max-width:760px){
   .selection-bar{flex-direction:column;align-items:stretch}
   .selection-actions{justify-content:flex-start}

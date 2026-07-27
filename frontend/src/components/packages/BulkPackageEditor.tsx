@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Save, X } from 'lucide-react'
-import type { ColumnConfig, InputColumnField, Package, PackageInput } from '../../types/package'
+import type { ColumnConfig, InputColumnField, Package, PackageInput, WorkflowConfig } from '../../types/package'
+import { SubmissionSlider } from './SubmissionSlider'
 
 type BulkField = Extract<InputColumnField, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents'> | 'notes'
 
@@ -17,18 +18,20 @@ const fallback: Partial<Record<BulkField, string[]>> = {
   discipline: ['Civil', 'Structural', 'Architectural', 'Electrical', 'Mechanical', 'Geotechnical'],
 }
 
-export type BulkPackagePatch = Partial<Pick<PackageInput, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents' | 'notes' | 'has_attachment' | 'is_abandoned' | 'workflow_terminated'>>
+export type BulkPackagePatch = Partial<Pick<PackageInput, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents' | 'notes' | 'has_attachment' | 'is_abandoned' | 'workflow_terminated' | 'submission_progress'>>
 
 interface Props {
   items: Package[]
   configs: ColumnConfig[]
+  workflowConfig: WorkflowConfig
   open: boolean
   saving: boolean
   onClose: () => void
   onSave: (patch: BulkPackagePatch) => void
 }
 
-export function BulkPackageEditor({ items, configs, open, saving, onClose, onSave }: Props) {
+export function BulkPackageEditor({ items, configs, workflowConfig, open, saving, onClose, onSave }: Props) {
+  const steps = workflowConfig.submission_steps
   const [documentType, setDocumentType] = useState('')
   const [initiator, setInitiator] = useState('')
   const [discipline, setDiscipline] = useState('')
@@ -37,6 +40,8 @@ export function BulkPackageEditor({ items, configs, open, saving, onClose, onSav
   const [hasAttachment, setHasAttachment] = useState<'keep' | 'yes' | 'no'>('keep')
   const [isAbandoned, setIsAbandoned] = useState<'keep' | 'yes' | 'no'>('keep')
   const [workflowTerminated, setWorkflowTerminated] = useState<'keep' | 'yes' | 'no'>('keep')
+  const [updateSubmissionProgress, setUpdateSubmissionProgress] = useState(false)
+  const [submissionStage, setSubmissionStage] = useState(0)
 
   const configMap = useMemo(
     () => Object.fromEntries(configs.map((c) => [c.field_name, c])) as Partial<Record<BulkField, ColumnConfig>>,
@@ -53,6 +58,8 @@ export function BulkPackageEditor({ items, configs, open, saving, onClose, onSav
     setHasAttachment('keep')
     setIsAbandoned('keep')
     setWorkflowTerminated('keep')
+    setUpdateSubmissionProgress(false)
+    setSubmissionStage(0)
   }, [open, items])
 
   if (!open) return null
@@ -74,6 +81,9 @@ export function BulkPackageEditor({ items, configs, open, saving, onClose, onSav
     if (hasAttachment !== 'keep') patch.has_attachment = hasAttachment === 'yes'
     if (isAbandoned !== 'keep') patch.is_abandoned = isAbandoned === 'yes'
     if (workflowTerminated !== 'keep') patch.workflow_terminated = workflowTerminated === 'yes'
+    if (updateSubmissionProgress) {
+      patch.submission_progress = Object.fromEntries(steps.map((step, index) => [step, index < submissionStage]))
+    }
     if (!Object.keys(patch).length) {
       window.alert('Choose at least one field to update')
       return null
@@ -148,6 +158,31 @@ export function BulkPackageEditor({ items, configs, open, saving, onClose, onSav
               )
             })}
           </div>
+          <fieldset className="bulk-progress-section">
+            <legend>Submission progress</legend>
+            <div className="editor-switch-row">
+              <div>
+                <strong>Update submission progress</strong>
+                <span>Apply the same completed stage to every selected document.</span>
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={updateSubmissionProgress}
+                  onChange={(e) => setUpdateSubmissionProgress(e.target.checked)}
+                />
+                <i />
+              </label>
+            </div>
+            <div className={`bulk-progress-slider ${updateSubmissionProgress ? '' : 'disabled'}`}>
+              <SubmissionSlider
+                steps={steps}
+                value={submissionStage}
+                onChange={setSubmissionStage}
+                disabled={!updateSubmissionProgress}
+              />
+            </div>
+          </fieldset>
           <div className="bulk-toggle-grid">
             <label>
               <span>Has attachment</span>

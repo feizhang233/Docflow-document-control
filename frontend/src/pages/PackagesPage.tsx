@@ -455,6 +455,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
       <BulkPackageEditor
         items={selectedItems}
         configs={configs.data || []}
+        workflowConfig={workflowConfig}
         open={bulkEditorOpen}
         saving={bulkUpdate.isPending}
         onClose={() => setBulkEditorOpen(false)}
