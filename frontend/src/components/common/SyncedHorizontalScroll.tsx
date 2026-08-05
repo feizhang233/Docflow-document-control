@@ -15,7 +15,7 @@ interface Props {
 
 /**
  * Horizontal scroll region with a slim dual-synced top scrollbar.
- * Top bar appears only when content overflows the container.
+ * Top track is always visible (常亮); content still syncs bidirectionally.
  */
 export function SyncedHorizontalScroll({
   children,
@@ -37,10 +37,11 @@ export function SyncedHorizontalScroll({
     <div className={`synced-hscroll${className ? ` ${className}` : ''}${overflowing ? ' is-overflowing' : ''}`}>
       <div
         ref={topRef}
-        className={`synced-hscroll-top${overflowing ? ' is-visible' : ''}`}
+        className="synced-hscroll-top"
         onScroll={onTopScroll}
-        aria-hidden={!overflowing}
-        tabIndex={overflowing ? 0 : -1}
+        aria-hidden={false}
+        tabIndex={0}
+        title={overflowing ? 'Horizontal scroll' : 'Table fits the view'}
       >
         <div ref={spacerRef} className="synced-hscroll-spacer" />
       </div>
