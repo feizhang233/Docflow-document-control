@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Copy, Eye, GripVertical, MoreHori
 import type { ColumnConfig, ColumnField, FeedbackStatusCode, Package, PageKind } from '../../types/package'
 import { ProgressTrack } from '../common/ProgressTrack'
 import { StatusBadge } from '../common/StatusBadge'
+import { SyncedHorizontalScroll } from '../common/SyncedHorizontalScroll'
 import { FeedbackStatus } from './FeedbackStatus'
 interface Props {
   items: Package[]
@@ -306,8 +307,14 @@ export function PackageTable({
   const configuredWidth = layoutConfigs
     .filter((item) => (kind === 'documents' ? item.is_visible : kind === 'workflow' ? item.is_visible_workflow : item.is_visible_transmittal))
     .reduce((total, item) => total + item.column_width, 110)
+  const visibilityKey = layoutConfigs
+    .map((item) => `${item.field_name}:${item.column_width}:${item.is_visible}:${item.is_visible_workflow}:${item.is_visible_transmittal}`)
+    .join('|')
   return (
-    <div className="table-scroll">
+    <SyncedHorizontalScroll
+      deps={[configuredWidth, visibilityKey, items.length, selectionMode, kind]}
+      aria-label="Document register table"
+    >
       <DndContext sensors={sensors} onDragEnd={dragEnd}>
         <table className="package-table configurable-table" style={{ width: configuredWidth, minWidth: '100%' }}>
           <thead>
@@ -359,6 +366,6 @@ export function PackageTable({
           </SortableContext>
         </table>
       </DndContext>
-    </div>
+    </SyncedHorizontalScroll>
   )
 }

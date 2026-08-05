@@ -220,3 +220,36 @@
   .selection-actions{justify-content:flex-start}
   .bulk-toggle-grid{grid-template-columns:1fr}
 }
+
+/* Dual-synced top horizontal scrollbar for wide tables (registers + settings). */
+.synced-hscroll{position:relative;min-width:0}
+.synced-hscroll-top{
+  overflow-x:auto;
+  overflow-y:hidden;
+  height:0;
+  max-height:0;
+  opacity:0;
+  pointer-events:none;
+  scrollbar-width:thin;
+  scrollbar-color:#b8c1cf transparent;
+  transition:height .12s ease,max-height .12s ease,opacity .12s ease;
+}
+.synced-hscroll-top.is-visible{
+  height:10px;
+  max-height:12px;
+  opacity:1;
+  pointer-events:auto;
+  margin-bottom:1px;
+  border-bottom:1px solid #eef1f5;
+  background:#fafbfd;
+}
+.synced-hscroll-top::-webkit-scrollbar{height:8px}
+.synced-hscroll-top::-webkit-scrollbar-track{background:transparent}
+.synced-hscroll-top::-webkit-scrollbar-thumb{background:#c5cdd9;border-radius:4px}
+.synced-hscroll-top::-webkit-scrollbar-thumb:hover{background:#aeb8c8}
+.synced-hscroll-spacer{height:1px;pointer-events:none}
+.synced-hscroll .table-scroll{overflow:auto}
+.config-table-scroll{margin:0 0 4px}
+.config-table-scroll-body{overflow:auto}
+.config-table-block{min-width:950px}
+.config-table-scroll .config-list{overflow-x:visible}
