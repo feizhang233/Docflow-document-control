@@ -33,7 +33,7 @@ export function DashboardPage() {
   ]
   let overviewOffset=0
   const overviewGradient=items.length?`conic-gradient(${overviewRows.map(row=>{const start=overviewOffset;overviewOffset+=row.count/items.length*100;return `${row.color} ${start}% ${overviewOffset}%`}).join(',')})`:'#e7ebf1'
-  const pending=items.filter(item=>!item.is_abandoned&&!currentSubmissionSteps.every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,currentSubmissionSteps)-completedSteps(left,currentSubmissionSteps)).slice(0,8)
+  const pending=items.filter(item=>!item.is_abandoned&&!item.workflow_terminated&&!item.feedback.Terminate&&!currentSubmissionSteps.every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,currentSubmissionSteps)-completedSteps(left,currentSubmissionSteps)).slice(0,8)
   const today=new Date()
   const todayChanges=(notifications?.items||[]).filter(item=>new Date(item.created_at).toDateString()===today.toDateString())
   const submissionChanges=todayChanges.filter(item=>item.notification_type==='submission_progress')

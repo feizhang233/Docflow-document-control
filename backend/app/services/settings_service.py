@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 from app.models.column_config import ColumnConfig
 from app.models.package import Package
 from app.models.workflow_config import WorkflowConfig
+from app.schemas.package import merge_submission_progress, merge_submission_steps
 from app.schemas.settings import CONFIGURABLE_FIELDS, ColumnConfigUpdate, CsvMetadataImport, MetadataImport, WorkflowConfigUpdate
 
 DEFAULT_WORKFLOW = {
-    "submission_steps":["Transmittal Preparation","DCO Backup","Signature Process","Workflow Initiation","Email Feedback"],
+    "submission_steps":["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"],
     "feedback_reviewers":["UTIBER","GDS"],
     "feedback_status_labels":{"A":"Approved","B":"Approved with comments","C":"Rejected","P":"Pending"},
     "feedback_status_colors":{"A":"#21815d","B":"#9b6816","C":"#b13f4c","P":"#4267bd"},
@@ -75,9 +76,10 @@ class SettingsService:
         return item
     def update_workflow_config(self, data: WorkflowConfigUpdate):
         item = self.get_workflow_config()
-        old_steps, old_reviewers = item.submission_steps, item.feedback_reviewers
+        old_steps, old_reviewers = merge_submission_steps(item.submission_steps), item.feedback_reviewers
         for package in self.db.scalars(select(Package)):
-            package.submission_progress = {new: bool(package.submission_progress.get(old, False)) for old,new in zip(old_steps, data.submission_steps)}
+            progress = merge_submission_progress(package.submission_progress)
+            package.submission_progress = {new: bool(progress.get(old, False)) for old,new in zip(old_steps, data.submission_steps)}
             package.feedback = {new: bool(package.feedback.get(old, False)) for old,new in zip(old_reviewers, data.feedback_reviewers)} | {"Terminate": bool(package.feedback.get("Terminate", False))}
             package.feedback_status = {new: package.feedback_status.get(old, "P") for old,new in zip(old_reviewers, data.feedback_reviewers)}
         item.submission_steps = data.submission_steps

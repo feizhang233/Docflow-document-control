@@ -1,9 +1,32 @@
 from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SUBMISSION_STEPS = ["Transmittal Preparation","DCO Backup","Signature Process","Workflow Initiation","Email Feedback"]
+SUBMISSION_STEPS = ["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"]
+LEGACY_MERGED_STEPS = ("Signature Process", "Workflow Initiation")
+MERGED_SUBMISSION_STEP = "Workflow Prepare"
 FEEDBACK_STEPS = ["UTIBER","GDS","Terminate"]
 FEEDBACK_STATUS_VALUES = {"A", "B", "C", "P"}
+
+def merge_submission_steps(steps: list[str]) -> list[str]:
+    cleaned = [str(step).strip() for step in steps]
+    if all(name in cleaned for name in LEGACY_MERGED_STEPS):
+        index = min(cleaned.index(name) for name in LEGACY_MERGED_STEPS)
+        merged = [step for step in cleaned if step not in LEGACY_MERGED_STEPS]
+        if MERGED_SUBMISSION_STEP not in merged:
+            merged.insert(min(index, len(merged)), MERGED_SUBMISSION_STEP)
+        return merged
+    if len(cleaned) == 5:
+        return [cleaned[0], cleaned[1], MERGED_SUBMISSION_STEP, cleaned[4]]
+    return cleaned
+
+def merge_submission_progress(progress: dict[str, bool] | None) -> dict[str, bool]:
+    merged = {str(step): bool(done) for step, done in (progress or {}).items()}
+    if all(name in merged for name in LEGACY_MERGED_STEPS):
+        done = merged[LEGACY_MERGED_STEPS[0]] and merged[LEGACY_MERGED_STEPS[1]]
+        for name in LEGACY_MERGED_STEPS:
+            merged.pop(name, None)
+        merged[MERGED_SUBMISSION_STEP] = bool(merged.get(MERGED_SUBMISSION_STEP, False) or done)
+    return merged
 
 class PackageBase(BaseModel):
     document_number: str = Field(default="", max_length=80)
@@ -23,10 +46,12 @@ class PackageBase(BaseModel):
     feedback: dict[str, bool] = Field(default_factory=lambda: {step: False for step in FEEDBACK_STEPS})
     feedback_status: dict[str, str] = Field(default_factory=lambda: {"UTIBER":"P", "GDS":"P"})
     order_index: int = Field(default=0, ge=0)
-    @field_validator("submission_progress")
+    @field_validator("submission_progress", mode="before")
     @classmethod
     def validate_progress(cls, value: dict[str,bool]):
-        if len(value) != 5: raise ValueError("submission_progress must contain exactly five workflow steps")
+        if isinstance(value, dict):
+            value = merge_submission_progress(value)
+        if len(value) != 4: raise ValueError("submission_progress must contain exactly four workflow steps")
         return value
     @field_validator("feedback", mode="before")
     @classmethod

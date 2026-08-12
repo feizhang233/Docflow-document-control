@@ -173,7 +173,7 @@ def test_workflow_configuration_reorders_and_remaps_existing_data(client):
     assert current.json()["submission_steps"][1] == "DCO Backup"
     assert current.json()["transmittal_prefixes"] == ["NFS-PCH-TRA-PZI-", "NFS-PCH-TRA-RFI-", "NFS-PCH-TRA-RPT-"]
     changed = client.put("/api/settings/workflow", json={
-        "submission_steps":["Preparation","Backup","Signature","Initiation","Email"],
+        "submission_steps":["Preparation","Backup","Workflow Prepare","Email"],
         "feedback_reviewers":["Reviewer One","Reviewer Two"],
         "feedback_status_labels":{"A":"Accepted","B":"Accepted with comments","C":"Rejected","P":"Pending"},
         "feedback_status_colors":{"A":"#15803d","B":"#a16207","C":"#b91c1c","P":"#1d4ed8"},
@@ -189,6 +189,34 @@ def test_workflow_configuration_reorders_and_remaps_existing_data(client):
     assert updated["feedback_status"]["Reviewer One"] == "A"
     duplicated = client.post(f"/api/packages/{created['id']}/duplicate").json()
     assert duplicated["feedback_status"] == {"Reviewer One":"P", "Reviewer Two":"P"}
+
+def test_legacy_signature_and_initiation_merge_into_workflow_prepare(client):
+    data = payload()
+    data["submission_progress"] = {
+        "Transmittal Preparation": True,
+        "DCO Backup": False,
+        "Signature Process": True,
+        "Workflow Initiation": True,
+        "Email Feedback": False,
+    }
+    created = client.post("/api/packages", json=data).json()
+    assert created["submission_progress"] == {
+        "Transmittal Preparation": True,
+        "DCO Backup": False,
+        "Workflow Prepare": True,
+        "Email Feedback": False,
+    }
+    current = client.get("/api/settings/workflow").json()
+    assert current["submission_steps"] == ["Transmittal Preparation", "DCO Backup", "Workflow Prepare", "Email Feedback"]
+    remapped = client.put("/api/settings/workflow", json={
+        "submission_steps": ["Transmittal Preparation", "DCO Backup", "Signature Process", "Workflow Initiation", "Email Feedback"],
+        "feedback_reviewers": current["feedback_reviewers"],
+        "feedback_status_labels": current["feedback_status_labels"],
+        "feedback_status_colors": current["feedback_status_colors"],
+        "transmittal_prefixes": current["transmittal_prefixes"],
+    })
+    assert remapped.status_code == 200
+    assert remapped.json()["submission_steps"] == ["Transmittal Preparation", "DCO Backup", "Workflow Prepare", "Email Feedback"]
 
 def test_blank_document_number_creates_draft(client):
     data = payload("")

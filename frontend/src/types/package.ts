@@ -1,6 +1,5 @@
 export const submissionSteps = [
-  'Transmittal Preparation', 'DCO Backup', 'Signature Process',
-  'Workflow Initiation', 'Email Feedback',
+  'Transmittal Preparation', 'DCO Backup', 'Workflow Prepare', 'Email Feedback',
 ] as const
 export const feedbackSteps = ['UTIBER', 'GDS'] as const
 export const feedbackStatusLabels = { A:'Approved', B:'Approved with comments', C:'Rejected', P:'Pending' } as const

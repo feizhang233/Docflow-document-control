@@ -7,7 +7,7 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 - Dashboard with package and workflow health metrics
 - Documents register with This Week (default), This Month, This Year, and All views
 - Dedicated Workflow and Transmittal registers with correct default sorting
-- Configurable six-stage Submission progress and two-reviewer Feedback tracking
+- Configurable four-stage Submission progress and two-reviewer Feedback tracking
 - Document Number and document date (day precision) in every package's basic information
 - Search, discipline filter, column sorting, CSV export, and drag-to-reorder
 - Create/edit modal, package detail drawer, optimistic order updates, and saved MySQL state

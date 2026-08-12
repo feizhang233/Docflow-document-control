@@ -51,8 +51,7 @@ Partial progress, feedback, and feedback-status objects are merged with existing
 
 - `Transmittal Preparation`
 - `DCO Backup`
-- `Signature Process`
-- `Workflow Initiation`
+- `Workflow Prepare`
 - `Email Feedback`
 
 The default feedback keys are `UTIBER`, `GDS`, and `Terminate`. Administrators can rename/reorder these fields in Settings; automation clients must use the currently configured names returned by `GET /api/settings/workflow`. `terminate_workflow` controls the separate, selectable Terminate Workflow status in the Workflow register and document detail card.
@@ -242,7 +241,7 @@ Lifecycle fields accepted by create/update and included in metadata backups are 
 | `POST` | `/api/metadata/import-csv?mode=merge` | Merge document rows parsed from a CSV file |
 | `POST` | `/api/metadata/import-csv?mode=replace` | Replace the document register with CSV rows |
 
-`PUT /api/settings/workflow` requires exactly five unique `submission_steps`, exactly two unique `feedback_reviewers`, labels for all four fixed status codes (`A`, `B`, `C`, `P`), and at least one `transmittal_prefixes` entry. Workflow configuration is included in metadata exports and restores.
+`PUT /api/settings/workflow` requires exactly four unique `submission_steps`, exactly two unique `feedback_reviewers`, labels for all four fixed status codes (`A`, `B`, `C`, `P`), and at least one `transmittal_prefixes` entry. Workflow configuration is included in metadata exports and restores. Legacy `Signature Process` and `Workflow Initiation` names are merged into `Workflow Prepare`.
 
 CSV imports accept a JSON body with `rows` after the browser parses a selected CSV file. The Settings screen supports the same headers emitted by CSV export: `document_number`, `document_date`, `document_type`, `initiator`, `discipline`, `number_of_documents`, `transmittal_number`, `workflow_number`, `workflow_terminated`, `has_attachment`, `is_abandoned`, and `notes`. In merge mode, a matching Document Number updates only columns present in the CSV; new rows receive the active Workflow defaults.
 

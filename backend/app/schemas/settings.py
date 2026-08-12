@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.schemas.package import PackageCreate
+from app.schemas.package import PackageCreate, merge_submission_steps
 
 CONFIGURABLE_FIELDS = {
     "document_number", "document_title", "document_date", "document_type", "initiator", "discipline",
@@ -9,7 +9,7 @@ CONFIGURABLE_FIELDS = {
 }
 
 class WorkflowConfigUpdate(BaseModel):
-    submission_steps: list[str] = Field(min_length=5, max_length=5)
+    submission_steps: list[str] = Field(min_length=4, max_length=4)
     feedback_reviewers: list[str] = Field(min_length=2, max_length=2)
     feedback_status_labels: dict[Literal["A","B","C","P"], str]
     feedback_status_colors: dict[Literal["A","B","C","P"], str] = Field(default_factory=lambda:{"A":"#21815d","B":"#9b6816","C":"#b13f4c","P":"#4267bd"})
@@ -18,6 +18,10 @@ class WorkflowConfigUpdate(BaseModel):
         min_length=1,
         max_length=20,
     )
+    @field_validator("submission_steps", mode="before")
+    @classmethod
+    def merge_legacy_submission_steps(cls, value: list[str]):
+        return merge_submission_steps(value) if isinstance(value, list) else value
     @field_validator("submission_steps", "feedback_reviewers")
     @classmethod
     def validate_unique_names(cls, value: list[str]):
