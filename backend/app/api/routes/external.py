@@ -18,49 +18,96 @@ from app.services.workflow_comment_service import WorkflowCommentService
 
 router = APIRouter(prefix="/external", tags=["external automation"])
 
+# Final Aconex review codes must not be silently downgraded to Pending by a
+# partial/stale automation payload (merge would otherwise overwrite C→P).
+_FINAL_FEEDBACK_CODES = frozenset({"A", "B", "C"})
+
+
 def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     if not secrets.compare_digest(x_api_key, settings.external_api_key):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
+
+def merge_feedback_status(existing: dict[str, str], incoming: dict[str, str]) -> dict[str, str]:
+    """Merge automation feedback codes without downgrading A/B/C back to P."""
+    merged = {str(key): str(value) for key, value in (existing or {}).items()}
+    for reviewer, code in (incoming or {}).items():
+        next_code = str(code or "P").strip().upper() or "P"
+        previous = str(merged.get(reviewer) or "P").strip().upper() or "P"
+        if next_code == "P" and previous in _FINAL_FEEDBACK_CODES:
+            continue
+        merged[str(reviewer)] = next_code
+    return merged
+
+
+def _values_for_package(item, data: ExternalWorkflowUpdate) -> dict:
+    values: dict = {}
+    if data.submission_progress is not None:
+        values["submission_progress"] = {**item.submission_progress, **data.submission_progress}
+    if data.feedback is not None:
+        values["feedback"] = {**item.feedback, **data.feedback}
+    if data.feedback_status is not None:
+        statuses = merge_feedback_status(item.feedback_status, data.feedback_status)
+        values["feedback_status"] = statuses
+        # Derive stage completion from the *merged* statuses so a rejected
+        # downgrade of GDS→P cannot clear an already-completed GDS stage.
+        derived = {reviewer: status != "P" for reviewer, status in statuses.items()}
+        values["feedback"] = {**values.get("feedback", item.feedback), **derived}
+    if data.terminate_workflow is not None:
+        values["workflow_terminated"] = data.terminate_workflow
+    return values
+
+
 @router.patch("/workflows/{workflow_number}", response_model=PackageRead, dependencies=[Depends(verify_api_key)])
 def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Session = Depends(get_db)):
     repo = PackageRepository(db)
-    item = repo.get_by_workflow_number(workflow_number)
-    if not item: raise HTTPException(status_code=404, detail="Workflow not found")
+    items = repo.list_by_workflow_number(workflow_number)
+    if not items:
+        raise HTTPException(status_code=404, detail="Workflow not found")
     config = SettingsService(db).get_workflow_config()
-    if data.submission_progress is not None and not set(data.submission_progress).issubset(config.submission_steps): raise HTTPException(status_code=422, detail="Unknown submission progress step")
+    if data.submission_progress is not None and not set(data.submission_progress).issubset(config.submission_steps):
+        raise HTTPException(status_code=422, detail="Unknown submission progress step")
     allowed_feedback = set(config.feedback_reviewers) | {"Terminate"}
-    if data.feedback is not None and not set(data.feedback).issubset(allowed_feedback): raise HTTPException(status_code=422, detail="Unknown feedback reviewer")
-    if data.feedback_status is not None and not set(data.feedback_status).issubset(config.feedback_reviewers): raise HTTPException(status_code=422, detail="Unknown feedback status reviewer")
-    values = {}
-    if data.submission_progress is not None: values["submission_progress"] = {**item.submission_progress, **data.submission_progress}
-    if data.feedback is not None: values["feedback"] = {**item.feedback, **data.feedback}
-    if data.feedback_status is not None:
-        statuses = {**item.feedback_status, **data.feedback_status}
-        values["feedback_status"] = statuses
-        values["feedback"] = {**values.get("feedback", item.feedback), **{reviewer: status != "P" for reviewer, status in data.feedback_status.items()}}
-    if data.terminate_workflow is not None: values["workflow_terminated"] = data.terminate_workflow
-    if not values: raise HTTPException(status_code=400, detail="No workflow status fields supplied")
-    item = repo.update(item, values)
+    if data.feedback is not None and not set(data.feedback).issubset(allowed_feedback):
+        raise HTTPException(status_code=422, detail="Unknown feedback reviewer")
+    if data.feedback_status is not None and not set(data.feedback_status).issubset(config.feedback_reviewers):
+        raise HTTPException(status_code=422, detail="Unknown feedback status reviewer")
+
+    updated_items = []
+    for item in items:
+        values = _values_for_package(item, data)
+        if not values:
+            continue
+        updated_items.append(repo.update(item, values))
+    if not updated_items:
+        raise HTTPException(status_code=400, detail="No workflow status fields supplied")
+
+    # One notification on the primary (lowest-id) package is enough for the register bell.
+    primary = updated_items[0]
     notifications = NotificationService(db)
     if data.submission_progress is not None:
         notifications.create_submission_progress_update(
-            package_id=item.id,
-            workflow_number=workflow_number, document_number=item.document_number,
+            package_id=primary.id,
+            workflow_number=workflow_number,
+            document_number=primary.document_number,
             message=combine_update_message(data.message, describe_submission_progress(data.submission_progress)),
         )
     if data.feedback is not None or data.feedback_status is not None or data.terminate_workflow is not None:
         notifications.create_workflow_feedback_update(
-            package_id=item.id,
-            workflow_number=workflow_number, document_number=item.document_number,
-            message=combine_update_message(data.message, describe_workflow_update(
-                feedback_status=data.feedback_status,
-                feedback=data.feedback,
-                terminate_workflow=data.terminate_workflow,
-                status_labels=config.feedback_status_labels,
-            )),
+            package_id=primary.id,
+            workflow_number=workflow_number,
+            document_number=primary.document_number,
+            message=combine_update_message(
+                data.message,
+                describe_workflow_update(
+                    feedback_status=data.feedback_status,
+                    feedback=data.feedback,
+                    terminate_workflow=data.terminate_workflow,
+                    status_labels=config.feedback_status_labels,
+                ),
+            ),
         )
-    return item
+    return primary
 
 
 @router.put(

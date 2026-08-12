@@ -232,6 +232,43 @@ def test_external_workflow_update_creates_notification(client):
     assert client.get("/api/notifications").json()["items"] == []
 
 
+def test_external_workflow_update_all_packages_and_rejects_status_downgrade(client):
+    first = client.post("/api/packages", json=payload("DOC-REV-1")).json()
+    second_payload = payload("DOC-REV-2")
+    second_payload["workflow_number"] = "WF-001"
+    second = client.post("/api/packages", json=second_payload).json()
+    assert first["id"] != second["id"]
+
+    applied = client.patch(
+        "/api/external/workflows/WF-001",
+        headers={"X-API-Key": "test-external-key"},
+        json={"feedback_status": {"UTIBER": "C", "GDS": "C"}},
+    )
+    assert applied.status_code == 200
+    assert applied.json()["feedback_status"] == {"UTIBER": "C", "GDS": "C"}
+    assert applied.json()["feedback"]["GDS"] is True
+
+    for package_id in (first["id"], second["id"]):
+        row = client.get(f"/api/packages/{package_id}").json()
+        assert row["feedback_status"] == {"UTIBER": "C", "GDS": "C"}
+        assert row["feedback"]["UTIBER"] is True
+        assert row["feedback"]["GDS"] is True
+
+    # Stale automation that only knows step 1 must not wipe completed GDS.
+    stale = client.patch(
+        "/api/external/workflows/WF-001",
+        headers={"X-API-Key": "test-external-key"},
+        json={"feedback_status": {"UTIBER": "C", "GDS": "P"}},
+    )
+    assert stale.status_code == 200
+    assert stale.json()["feedback_status"] == {"UTIBER": "C", "GDS": "C"}
+    assert stale.json()["feedback"]["GDS"] is True
+    for package_id in (first["id"], second["id"]):
+        row = client.get(f"/api/packages/{package_id}").json()
+        assert row["feedback_status"]["GDS"] == "C"
+        assert row["feedback"]["GDS"] is True
+
+
 def test_external_workflow_update_preserves_long_message(client):
     client.post("/api/packages", json=payload())
     long_message = "Complete workflow response: " + ("technical comment " * 80)

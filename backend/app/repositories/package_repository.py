@@ -40,7 +40,14 @@ class PackageRepository:
         items = list(self.db.scalars(query.order_by(order, Package.id).offset((page-1)*page_size).limit(page_size)))
         return items, count
     def get(self, package_id: int): return self.db.get(Package, package_id)
-    def get_by_workflow_number(self, number: str): return self.db.scalars(select(Package).where(Package.workflow_number == number)).first()
+    def get_by_workflow_number(self, number: str): return self.db.scalars(select(Package).where(Package.workflow_number == number).order_by(Package.id)).first()
+    def list_by_workflow_number(self, number: str) -> list[Package]:
+        """Return every package that shares a workflow number (revisions/duplicates)."""
+        return list(
+            self.db.scalars(
+                select(Package).where(Package.workflow_number == number).order_by(Package.id)
+            )
+        )
     def create(self, values: dict):
         item = Package(**values); self.db.add(item); self.db.commit(); self.db.refresh(item); return item
     def update(self, item: Package, values: dict):

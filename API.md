@@ -47,7 +47,7 @@ All body fields are optional, but at least one workflow or feedback field must b
 }
 ```
 
-Partial progress, feedback, and feedback-status objects are merged with existing values. Setting an approval status to `A`, `B`, or `C` automatically marks that reviewer stage complete; `P` marks it pending. Set `feedback.Terminate=true` to grey the complete Feedback bar while Submission Progress keeps its existing colour. The default submission keys, in order, are:
+Partial progress, feedback, and feedback-status objects are merged with existing values. When several packages share the same Workflow Number (revisions), **every matching package** is updated. Setting an approval status to `A`, `B`, or `C` automatically marks that reviewer stage complete. Automation cannot silently downgrade a stored `A`/`B`/`C` back to `P` via merge (stale bulk syncs used to wipe completed GDS/UTIBER stages); the document UI can still edit statuses directly. Set `feedback.Terminate=true` to grey the complete Feedback bar while Submission Progress keeps its existing colour. The default submission keys, in order, are:
 
 - `Transmittal Preparation`
 - `DCO Backup`
