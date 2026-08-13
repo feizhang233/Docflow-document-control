@@ -43,7 +43,7 @@ export function SettingsPage() {
     a.href=url;a.download=`docflow-metadata-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);toast.success('Metadata backup exported')
   },onError:e=>toast.error(getApiError(e))})
   const csvMutation=useMutation({mutationFn:()=>packagesApi.list({period:'all',page_size:200}),onSuccess:data=>{
-    const keys=['document_number','document_title','document_date','document_type','initiator','discipline','number_of_documents','transmittal_number','workflow_number','workflow_terminated','has_attachment','is_abandoned','notes'] as const
+    const keys=['project_code','document_number','document_title','document_date','document_type','initiator','discipline','number_of_documents','transmittal_number','workflow_number','workflow_terminated','has_attachment','is_abandoned','notes'] as const
     const csv=[keys.join(','),...data.items.map(row=>keys.map(key=>`"${String(row[key]??'').replaceAll('"','""')}"`).join(','))].join('\n')
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=`docflow-documents-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast.success('Document CSV exported')
   },onError:e=>toast.error(getApiError(e))})
@@ -89,7 +89,7 @@ export function SettingsPage() {
   </>
 }
 
-const csvColumns = new Set(['document_number','document_title','document_date','document_type','initiator','discipline','number_of_documents','transmittal_number','workflow_number','workflow_terminated','has_attachment','is_abandoned','notes'])
+const csvColumns = new Set(['project_code','document_number','document_title','document_date','document_type','initiator','discipline','number_of_documents','transmittal_number','workflow_number','workflow_terminated','has_attachment','is_abandoned','notes'])
 
 function parseCsv(text:string):string[][]{
   const rows:string[][]=[];let row:string[]=[];let cell='';let quoted=false
@@ -151,6 +151,7 @@ function parseDocumentCsv(text:string):CsvImportRow[]{
     const value:CsvImportRow={}
     const rowNumber=rowIndex+2
     // Only send fields that actually have values so empty cells do not fail API validation.
+    if(has('project_code')&&textValue('project_code')){const project=textValue('project_code').toUpperCase();if(!['NFS','FST','FBP'].includes(project))throw new Error(`Row ${rowNumber}: project_code must be NFS, FST, or FBP`);value.project_code=project as CsvImportRow['project_code']}
     if(has('document_number')&&textValue('document_number'))value.document_number=textValue('document_number')
     if(has('document_title'))value.document_title=textValue('document_title')
     if(has('document_date')){const date=parseOptionalDate(cells.document_date??'',rowNumber);if(date)value.document_date=date}

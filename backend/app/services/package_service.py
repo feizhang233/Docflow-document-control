@@ -60,7 +60,7 @@ class PackageService:
         # Append -COPY only as a visual cue that this is a cloned register row.
         number = f"{item.document_number}-COPY"
         values = {
-            "document_number": number, "document_title": item.document_title, "document_date": item.document_date, "document_type": item.document_type,
+            "project_code": item.project_code, "document_number": number, "document_title": item.document_title, "document_date": item.document_date, "document_type": item.document_type,
             "initiator": item.initiator, "discipline": item.discipline, "number_of_documents": item.number_of_documents,
             "transmittal_number": None, "workflow_number": None, "workflow_terminated": False,
             "notes": item.notes, "has_attachment": item.has_attachment, "is_abandoned": False,

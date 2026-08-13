@@ -3,11 +3,15 @@ export const submissionSteps = [
 ] as const
 export const feedbackSteps = ['UTIBER', 'GDS'] as const
 export const feedbackStatusLabels = { A:'Approved', B:'Approved with comments', C:'Rejected', P:'Pending' } as const
+export const projectCodes = ['NFS', 'FST', 'FBP'] as const
 
 export type FeedbackStatusCode = keyof typeof feedbackStatusLabels
+export type ProjectCode = typeof projectCodes[number]
+export type ProjectFilter = ProjectCode | 'ALL'
 
 export interface Package {
   id: number
+  project_code: ProjectCode
   document_number: string
   document_title: string
   document_date: string
@@ -70,6 +74,7 @@ export interface MetadataBackup {
 }
 
 export interface CsvImportRow {
+  project_code?: ProjectCode
   document_number?: string
   document_title?: string
   document_date?: string

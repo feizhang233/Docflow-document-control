@@ -222,7 +222,9 @@ The former Workflow Status field is removed. Feedback is now the workflow feedba
 | `DELETE` | `/api/packages/{id}` | Delete a document |
 | `POST` | `/api/packages/reorder` | Persist row ordering |
 
-List parameters: `period=week|month|year|all`, `search`, `discipline`, `document_type`, `transmittal_prefix`, `sort_by`, `sort_order`, `page`, and `page_size`. `transmittal_prefix` performs a starts-with match against the Transmittal Number.
+List parameters: `period=week|month|year|all`, `project_code=NFS|FST|FBP`, `search`, `discipline`, `document_type`, `transmittal_prefix`, `sort_by`, `sort_order`, `page`, and `page_size`. Omitting `project_code` returns all projects. `transmittal_prefix` performs a starts-with match against the Transmittal Number.
+
+Every package response includes `project_code`. New packages default to `NFS` when it is omitted; `FST` represents Fire Station and `FBP` represents Footbridge. Workflow Numbers remain shared and are not project-prefixed.
 
 Lifecycle fields accepted by create/update and included in metadata backups are `notes`, `has_attachment`, `is_abandoned`, and `workflow_terminated`. Setting `is_abandoned=true` greys both progress tracks in the UI without deleting their recorded steps.
 

@@ -1,10 +1,11 @@
 import axios from 'axios'
-import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, WorkflowCommentList, WorkflowConfig } from '../types/package'
+import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
 const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api', timeout: 12_000 })
 
 interface ListParams {
   period?: Period
+  project_code?: ProjectCode
   search?: string
   discipline?: string
   document_type?: string

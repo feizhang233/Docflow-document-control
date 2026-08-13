@@ -5,7 +5,7 @@ from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 from app.models.package import Package
 
-SORTABLE_FIELDS = {"document_number","document_title","document_date","document_type","initiator","discipline","number_of_documents","transmittal_number","workflow_number","workflow_terminated","is_abandoned","has_attachment","order_index","created_at","updated_at"}
+SORTABLE_FIELDS = {"project_code","document_number","document_title","document_date","document_type","initiator","discipline","number_of_documents","transmittal_number","workflow_number","workflow_terminated","is_abandoned","has_attachment","order_index","created_at","updated_at"}
 
 def period_bounds(period: str, today: date | None = None) -> tuple[date, date]:
     """Return an inclusive start and exclusive end for the current calendar period."""
@@ -23,8 +23,9 @@ def period_bounds(period: str, today: date | None = None) -> tuple[date, date]:
 
 class PackageRepository:
     def __init__(self, db: Session): self.db = db
-    def list(self, *, period: str, search: str | None, discipline: str | None, document_type: str | None, transmittal_prefix: str | None, sort_by: str, sort_order: str, page: int, page_size: int):
+    def list(self, *, period: str, project_code: str | None, search: str | None, discipline: str | None, document_type: str | None, transmittal_prefix: str | None, sort_by: str, sort_order: str, page: int, page_size: int):
         query = select(Package)
+        if project_code: query = query.where(Package.project_code == project_code)
         if period != "all":
             start, end = period_bounds(period)
             query = query.where(Package.document_date >= start, Package.document_date < end)

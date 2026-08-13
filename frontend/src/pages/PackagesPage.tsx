@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, CheckSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, MoreHorizontal, OctagonX, Pencil, Plus, RotateCcw, Search, Square, Trash2, X } from 'lucide-react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getApiError, packagesApi, settingsApi } from '../lib/api'
 import { feedbackSteps, submissionSteps, type FilterRule, type Package, type PackageInput, type PageKind, type Period, type WorkflowConfig } from '../types/package'
@@ -12,6 +12,7 @@ import { PackageEditor } from '../components/packages/PackageEditor'
 import { BulkPackageEditor, type BulkPackagePatch } from '../components/packages/BulkPackageEditor'
 import { AdvancedFilter } from '../components/packages/AdvancedFilter'
 import { useDismissableLayer } from '../hooks/useDismissableLayer'
+import { prefixesForProject, projectFilterFrom, projectLabels } from '../lib/projects'
 
 const meta = {
   documents: ['Documents', 'Manage submissions and monitor every stage of your document register.'],
@@ -31,6 +32,8 @@ const defaultWorkflowConfig: WorkflowConfig = {
 export function PackagesPage({ kind }: { kind: PageKind }) {
   const { period: routePeriod } = useParams()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const selectedProject = projectFilterFrom(searchParams.get('project'))
   const focusParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const focusValue = focusParams.get('focus') || ''
   const focusPackageId = Number(focusParams.get('package')) || null
@@ -55,13 +58,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const queryClient = useQueryClient()
   const focusPackageQuery = useQuery({ queryKey: ['package-focus', focusPackageId], queryFn: () => packagesApi.get(focusPackageId!), enabled: !!focusPackageId, retry: false })
   const focusSearchValue = focusPackageQuery.data?.document_number || focusValue
-  const params = { period, search: search || undefined, discipline: discipline || undefined, transmittal_prefix: kind === 'transmittal' ? (transmittalPrefix || undefined) : undefined, sort_by: sortBy, sort_order: sortOrder, page, page_size: pageSize }
+  const params = { period, project_code: selectedProject === 'ALL' ? undefined : selectedProject, search: search || undefined, discipline: discipline || undefined, transmittal_prefix: kind === 'transmittal' ? (transmittalPrefix || undefined) : undefined, sort_by: sortBy, sort_order: sortOrder, page, page_size: pageSize }
   const query = useQuery({ queryKey: ['packages', params], queryFn: () => packagesApi.list(params), placeholderData: (previous) => previous })
   const configs = useQuery({ queryKey: ['column-configs'], queryFn: settingsApi.listColumns })
   const workflowQuery = useQuery({ queryKey: ['workflow-config'], queryFn: settingsApi.getWorkflow })
   const workflowConfig = workflowQuery.data || defaultWorkflowConfig
   const currentSubmissionSteps = workflowConfig.submission_steps
   const currentFeedbackReviewers = workflowConfig.feedback_reviewers
+  const transmittalPrefixes = useMemo(() => prefixesForProject(workflowConfig.transmittal_prefixes, selectedProject), [workflowConfig.transmittal_prefixes, selectedProject])
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['packages'] })
   const save = useMutation({
     mutationFn: (data: PackageInput) => (editing ? packagesApi.update(editing.id, data) : packagesApi.create(data)),
@@ -186,10 +190,13 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     setTransmittalPrefix('')
     setSelectionMode(false)
     setSelectedIds(new Set())
+    setSelected(null)
+    setEditing(null)
+    setEditorOpen(false)
     setBulkEditorOpen(false)
     setBulkMenuOpen(false)
-  }, [kind])
-  useEffect(() => setPage(1), [period, search, discipline, transmittalPrefix, sortBy, sortOrder, pageSize])
+  }, [kind, selectedProject])
+  useEffect(() => setPage(1), [period, selectedProject, search, discipline, transmittalPrefix, sortBy, sortOrder, pageSize])
   useEffect(() => { if (query.data && page > totalPages) setPage(totalPages) }, [query.data, page, totalPages])
   useEffect(() => {
     if (!focusValue && !focusPackageId) return
@@ -284,7 +291,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     <>
       <div className="page-header">
         <div>
-          <div className="breadcrumb">Document Control <span>/</span> {kind === 'documents' ? titlePeriod : meta[kind][0]}</div>
+          <div className="breadcrumb">Document Control <span>/</span> {projectLabels[selectedProject]} <span>/</span> {kind === 'documents' ? titlePeriod : meta[kind][0]}</div>
           <h1>{meta[kind][0]}</h1>
           <p>{meta[kind][1]}</p>
         </div>
@@ -319,7 +326,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
                 <span>Type</span>
                 <select aria-label="Filter by transmittal number prefix" value={transmittalPrefix} onChange={(e) => setTransmittalPrefix(e.target.value)}>
                   <option value="">All transmittals</option>
-                  {workflowConfig.transmittal_prefixes.map((prefix) => <option key={prefix} value={prefix}>{prefix}</option>)}
+                  {transmittalPrefixes.map((prefix) => <option key={prefix} value={prefix}>{prefix}</option>)}
                 </select>
               </label>
             )}
@@ -380,7 +387,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         )}
         <div className="result-strip">
           <div>
-            <strong>{filters.length ? visibleItems.length : query.data?.total ?? '—'}</strong> documents <span>·</span> {titlePeriod}
+            <strong>{filters.length ? visibleItems.length : query.data?.total ?? '—'}</strong> documents <span>·</span> {projectLabels[selectedProject]} <span>·</span> {titlePeriod}
             {filters.length > 0 && <span>· {filters.length} filters</span>}
             {selectionMode && <span>· Selection mode</span>}
           </div>

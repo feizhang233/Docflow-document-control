@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SUBMISSION_STEPS = ["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"]
@@ -6,6 +7,7 @@ LEGACY_MERGED_STEPS = ("Signature Process", "Workflow Initiation")
 MERGED_SUBMISSION_STEP = "Workflow Prepare"
 FEEDBACK_STEPS = ["UTIBER","GDS","Terminate"]
 FEEDBACK_STATUS_VALUES = {"A", "B", "C", "P"}
+ProjectCode = Literal["NFS", "FST", "FBP"]
 
 def merge_submission_steps(steps: list[str]) -> list[str]:
     cleaned = [str(step).strip() for step in steps]
@@ -29,6 +31,7 @@ def merge_submission_progress(progress: dict[str, bool] | None) -> dict[str, boo
     return merged
 
 class PackageBase(BaseModel):
+    project_code: ProjectCode = "NFS"
     document_number: str = Field(default="", max_length=80)
     document_title: str = Field(default="", max_length=255)
     document_date: date = Field(default_factory=date.today)
@@ -69,6 +72,7 @@ class PackageBase(BaseModel):
 
 class PackageCreate(PackageBase): pass
 class PackageUpdate(BaseModel):
+    project_code: ProjectCode | None = None
     document_number: str | None = Field(default=None, max_length=80)
     document_title: str | None = Field(default=None, max_length=255)
     document_date: date | None = None

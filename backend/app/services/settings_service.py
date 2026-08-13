@@ -148,7 +148,7 @@ class SettingsService:
             if not number:
                 number = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
             defaults = {
-                "document_number": number, "document_title":"", "document_date": date.today(), "document_type":"", "initiator":"", "discipline":"",
+                "project_code":"NFS", "document_number": number, "document_title":"", "document_date": date.today(), "document_type":"", "initiator":"", "discipline":"",
                 "number_of_documents":1, "transmittal_number":None, "workflow_number":None, "workflow_terminated":False,
                 "notes":"", "has_attachment":False, "is_abandoned":False,
                 "submission_progress":{step:False for step in workflow.submission_steps},

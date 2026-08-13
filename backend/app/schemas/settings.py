@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.schemas.package import PackageCreate, merge_submission_steps
+from app.schemas.package import PackageCreate, ProjectCode, merge_submission_steps
 
 CONFIGURABLE_FIELDS = {
     "document_number", "document_title", "document_date", "document_type", "initiator", "discipline",
@@ -131,6 +131,7 @@ class MetadataImportResult(BaseModel):
     configs_updated: int
 
 class CsvImportRow(BaseModel):
+    project_code: ProjectCode | None = None
     document_number: str | None = Field(default=None, max_length=80)
     document_title: str | None = Field(default=None, max_length=255)
     document_date: date | None = None
@@ -146,7 +147,7 @@ class CsvImportRow(BaseModel):
     notes: str | None = Field(default=None, max_length=5000)
 
     @field_validator(
-        "document_number", "document_title", "document_type", "initiator", "discipline",
+        "project_code", "document_number", "document_title", "document_type", "initiator", "discipline",
         "transmittal_number", "workflow_number", "notes",
         mode="before",
     )

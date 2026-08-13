@@ -11,8 +11,8 @@ from app.services.workflow_comment_service import WorkflowCommentService
 router = APIRouter(prefix="/packages", tags=["packages"])
 
 @router.get("", response_model=PackageList)
-def list_packages(period: Literal["week","month","year","all"]="week", search: str|None=None, discipline: str|None=None, document_type: str|None=None, transmittal_prefix: str|None=Query(default=None,max_length=80), sort_by: str="order_index", sort_order: Literal["asc","desc"]="asc", page: int=Query(1,ge=1), page_size: int=Query(50,ge=1,le=200), db: Session=Depends(get_db)):
-    items,total = PackageRepository(db).list(period=period,search=search,discipline=discipline,document_type=document_type,transmittal_prefix=transmittal_prefix,sort_by=sort_by,sort_order=sort_order,page=page,page_size=page_size)
+def list_packages(period: Literal["week","month","year","all"]="week", project_code: Literal["NFS","FST","FBP"]|None=None, search: str|None=None, discipline: str|None=None, document_type: str|None=None, transmittal_prefix: str|None=Query(default=None,max_length=80), sort_by: str="order_index", sort_order: Literal["asc","desc"]="asc", page: int=Query(1,ge=1), page_size: int=Query(50,ge=1,le=200), db: Session=Depends(get_db)):
+    items,total = PackageRepository(db).list(period=period,project_code=project_code,search=search,discipline=discipline,document_type=document_type,transmittal_prefix=transmittal_prefix,sort_by=sort_by,sort_order=sort_order,page=page,page_size=page_size)
     return PackageList(items=items,total=total,page=page,page_size=page_size)
 
 @router.get("/{package_id}", response_model=PackageRead)

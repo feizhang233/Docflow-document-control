@@ -15,6 +15,7 @@ def payload(number="DOC-CIV-001"):
 
 def test_package_crud(client):
     created=client.post("/api/packages",json=payload()).json()
+    assert created["project_code"] == "NFS"
     assert created["document_number"]=="DOC-CIV-001"
     assert created["document_title"] == "Foundation layout"
     assert created["document_date"]=="2026-07-11"
@@ -25,6 +26,25 @@ def test_package_crud(client):
     updated=client.patch(f"/api/packages/{created['id']}",json={"number_of_documents":9})
     assert updated.json()["number_of_documents"]==9
     assert client.delete(f"/api/packages/{created['id']}").status_code==204
+
+def test_project_assignment_and_register_filtering(client):
+    nfs = client.post("/api/packages", json=payload("NFS-DOC-001")).json()
+    fst_payload = payload("FST-DOC-001") | {"project_code":"FST", "transmittal_number":"FST-PCH-TRA-RPT-001"}
+    fbp_payload = payload("FBP-DOC-001") | {"project_code":"FBP", "transmittal_number":"FBP-PCH-TRA-RPT-001"}
+    fst = client.post("/api/packages", json=fst_payload).json()
+    fbp = client.post("/api/packages", json=fbp_payload).json()
+
+    assert nfs["project_code"] == "NFS"
+    assert fst["project_code"] == "FST"
+    assert fbp["project_code"] == "FBP"
+    assert client.get("/api/packages", params={"period":"all"}).json()["total"] == 3
+    fst_items = client.get("/api/packages", params={"period":"all", "project_code":"FST"}).json()
+    assert fst_items["total"] == 1
+    assert fst_items["items"][0]["document_number"] == "FST-DOC-001"
+    assert client.get("/api/packages", params={"period":"all", "project_code":"OTHER"}).status_code == 422
+
+    duplicated = client.post(f"/api/packages/{fst['id']}/duplicate").json()
+    assert duplicated["project_code"] == "FST"
 
 def test_duplicate_document_number_allowed_for_revisions(client):
     first = client.post("/api/packages", json=payload()).json()
@@ -63,6 +83,7 @@ def test_duplicate_and_lifecycle_metadata(client):
     duplicate=client.post(f"/api/packages/{created['id']}/duplicate")
     assert duplicate.status_code==201
     assert duplicate.json()["document_number"]=="DOC-CIV-001-COPY"
+    assert duplicate.json()["project_code"]=="NFS"
     assert duplicate.json()["workflow_number"] is None
     updated=client.patch(f"/api/packages/{created['id']}",json={"notes":"Stopped by client instruction.","has_attachment":True,"is_abandoned":True,"workflow_terminated":True})
     assert updated.status_code==200
@@ -108,6 +129,7 @@ def test_column_config_and_metadata_backup(client):
     assert document_type["option_colors"]["Drawing"] == "#3164ce"
     backup = client.get("/api/metadata/export")
     assert backup.status_code == 200 and backup.json()["packages"][0]["document_number"] == "DOC-CIV-001"
+    assert backup.json()["packages"][0]["project_code"] == "NFS"
     result = client.post("/api/metadata/import?mode=replace", json=backup.json())
     assert result.status_code == 200 and result.json()["packages_created"] == 1
 
@@ -141,6 +163,18 @@ def test_csv_import_accepts_empty_and_slash_dates(client):
     slash = client.get("/api/packages", params={"period":"all","search":"DOC-SLASH-DATE"}).json()["items"][0]
     assert empty["document_type"] == "Drawing"
     assert slash["document_date"] == "2026-07-12"
+
+def test_csv_import_supports_projects_and_defaults_to_nfs(client):
+    result = client.post("/api/metadata/import-csv?mode=replace", json={"rows":[
+        {"document_number":"FST-CSV-001", "project_code":"FST"},
+        {"document_number":"LEGACY-CSV-001"},
+    ]})
+    assert result.status_code == 200, result.text
+    items = client.get("/api/packages", params={"period":"all", "sort_by":"document_number"}).json()["items"]
+    assert {item["document_number"]:item["project_code"] for item in items} == {
+        "FST-CSV-001":"FST",
+        "LEGACY-CSV-001":"NFS",
+    }
 
 def test_csv_import_keeps_duplicate_document_numbers_as_separate_rows(client):
     """Same document_number in one CSV = separate revisions, not collapsed."""

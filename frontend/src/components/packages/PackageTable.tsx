@@ -251,7 +251,7 @@ function SortableRow({
       ) : (
         <td className="drag-cell"><button {...attributes} {...listeners} aria-label="Drag to reorder"><GripVertical size={16} /></button></td>
       )}
-      {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
+      {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong><span className={`project-tag project-${item.project_code.toLowerCase()}`}>{item.project_code}</span></td>}
       {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
       {shown('document_title') && <td className="document-title-cell" style={styleFor(config('document_title'))}>{item.document_title || '—'}</td>}
       {shown('document_date') && <td className="mono-cell" style={styleFor(config('document_date'))}>{item.has_attachment ? <span className="attachment-label"><Paperclip /> Attachment</span> : item.document_date}</td>}
