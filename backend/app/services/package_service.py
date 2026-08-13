@@ -12,12 +12,15 @@ class PackageService:
     def __init__(self, db: Session): self.repo = PackageRepository(db)
     def create(self, data: PackageCreate):
         values = data.model_dump()
+        values["project_code"] = SettingsService(self.repo.db).require_project_code(values.get("project_code"))
         if not values["document_number"].strip():
             values["document_number"] = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
         return self.repo.create(values)
     def update(self, package_id: int, data: PackageUpdate):
         item = self.require(package_id)
         values = data.model_dump(exclude_unset=True)
+        if "project_code" in values:
+            values["project_code"] = SettingsService(self.repo.db).require_project_code(values.get("project_code"))
         if values.get("document_number") is not None and not values["document_number"].strip():
             values["document_number"] = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
         previous_submission = dict(item.submission_progress)

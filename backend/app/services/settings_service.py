@@ -1,12 +1,20 @@
 from datetime import date, datetime, timezone
 from uuid import uuid4
+from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from app.models.column_config import ColumnConfig
 from app.models.package import Package
+from app.models.project_config import ProjectConfig
 from app.models.workflow_config import WorkflowConfig
-from app.schemas.package import merge_submission_progress, merge_submission_steps
-from app.schemas.settings import CONFIGURABLE_FIELDS, ColumnConfigUpdate, CsvMetadataImport, MetadataImport, WorkflowConfigUpdate
+from app.schemas.package import DEFAULT_PROJECT_CODE, merge_submission_progress, merge_submission_steps
+from app.schemas.settings import CONFIGURABLE_FIELDS, ColumnConfigUpdate, CsvMetadataImport, MetadataImport, ProjectConfigUpdate, WorkflowConfigUpdate
+
+DEFAULT_PROJECTS = [
+    {"id": 1, "code": "NFS", "name": "NFS Main Project"},
+    {"id": 2, "code": "FST", "name": "Fire Station"},
+    {"id": 3, "code": "FBP", "name": "Footbridge"},
+]
 
 DEFAULT_WORKFLOW = {
     "submission_steps":["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"],
@@ -69,6 +77,83 @@ class SettingsService:
             item.option_colors = option_colors
         self.db.commit()
         return self.list_configs()
+    def get_project_config(self):
+        item = self.db.get(ProjectConfig, 1)
+        if not item:
+            item = ProjectConfig(id=1, projects=[dict(project) for project in DEFAULT_PROJECTS])
+            self.db.add(item)
+            self.db.commit()
+            self.db.refresh(item)
+        return item
+    def project_codes(self) -> list[str]:
+        return [str(project["code"]) for project in self.get_project_config().projects]
+    def default_project_code(self) -> str:
+        codes = self.project_codes()
+        return codes[0] if codes else DEFAULT_PROJECT_CODE
+    def require_project_code(self, code: str | None) -> str:
+        allowed = self.project_codes()
+        cleaned = (code or "").strip().upper()
+        if not cleaned:
+            return allowed[0] if allowed else DEFAULT_PROJECT_CODE
+        if cleaned not in allowed:
+            raise HTTPException(status_code=422, detail=f"project_code must be one of: {', '.join(allowed)}")
+        return cleaned
+    def project_config_payload(self):
+        item = self.get_project_config()
+        counts = dict(self.db.execute(select(Package.project_code, func.count()).group_by(Package.project_code)).all())
+        return {
+            "id": item.id,
+            "projects": [{**project, "document_count": int(counts.get(project["code"], 0))} for project in item.projects],
+            "updated_at": item.updated_at,
+        }
+    def update_project_config(self, data: ProjectConfigUpdate):
+        item = self.get_project_config()
+        old_by_id = {int(project["id"]): project for project in item.projects if project.get("id") is not None}
+        used_ids: set[int] = set()
+        next_id = max([int(project.get("id") or 0) for project in item.projects] + [int(project.id or 0) for project in data.projects], default=0) + 1
+        incoming: list[dict] = []
+        remaps: list[tuple[str, str]] = []
+        for project in data.projects:
+            project_id = project.id
+            if project_id and project_id in old_by_id and project_id not in used_ids:
+                previous = old_by_id[project_id]
+                if previous["code"] != project.code:
+                    remaps.append((previous["code"], project.code))
+                used_ids.add(project_id)
+            else:
+                project_id = next_id
+                next_id += 1
+            incoming.append({"id": project_id, "code": project.code, "name": project.name})
+        remaining_old_codes = {old_by_id[project_id]["code"] for project_id in old_by_id if project_id not in used_ids}
+        for old_code, new_code in remaps:
+            remaining_old_codes.discard(old_code)
+            for package in self.db.scalars(select(Package).where(Package.project_code == old_code)):
+                package.project_code = new_code
+        leftover = remaining_old_codes - {project["code"] for project in incoming}
+        if leftover:
+            counts = dict(self.db.execute(select(Package.project_code, func.count()).where(Package.project_code.in_(leftover)).group_by(Package.project_code)).all())
+            blocking = [code for code in leftover if counts.get(code)]
+            if blocking:
+                raise HTTPException(status_code=400, detail=f"Cannot remove project(s) still used by documents: {', '.join(sorted(blocking))}")
+        item.projects = incoming
+        self.db.commit()
+        self.db.refresh(item)
+        return self.project_config_payload()
+    def ensure_project_codes(self, codes: list[str]):
+        item = self.get_project_config()
+        existing = {str(project["code"]) for project in item.projects}
+        next_id = max((int(project.get("id") or 0) for project in item.projects), default=0) + 1
+        added = False
+        for code in codes:
+            cleaned = (code or "").strip().upper()
+            if cleaned and cleaned not in existing:
+                item.projects = [*item.projects, {"id": next_id, "code": cleaned, "name": cleaned}]
+                existing.add(cleaned)
+                next_id += 1
+                added = True
+        if added:
+            self.db.add(item)
+            self.db.flush()
     def get_workflow_config(self):
         item = self.db.get(WorkflowConfig, 1)
         if not item:
@@ -90,7 +175,7 @@ class SettingsService:
         self.db.commit(); self.db.refresh(item); return item
     def export(self):
         packages = list(self.db.scalars(select(Package).order_by(Package.order_index, Package.id)))
-        return {"format_version":"1.0", "exported_at":datetime.now(timezone.utc), "packages":packages, "column_configs":self.list_configs(), "workflow_config":self.get_workflow_config()}
+        return {"format_version":"1.0", "exported_at":datetime.now(timezone.utc), "packages":packages, "column_configs":self.list_configs(), "workflow_config":self.get_workflow_config(), "project_config":self.project_config_payload()}
     def import_metadata(self, payload: MetadataImport, mode: str):
         """Import full metadata backup.
 
@@ -102,6 +187,8 @@ class SettingsService:
             self.db.execute(delete(Package)); self.db.flush()
         if payload.workflow_config:
             self.update_workflow_config(payload.workflow_config)
+        if payload.project_config:
+            self.update_project_config(payload.project_config)
         for row in payload.packages:
             values = row.model_dump(exclude={"created_at","updated_at"})
             number = (row.document_number or "").strip()
@@ -115,6 +202,7 @@ class SettingsService:
                 item.updated_at = row.updated_at.replace(tzinfo=None)
             self.db.add(item)
             created += 1
+        self.ensure_project_codes([row.project_code for row in payload.packages])
         for incoming in payload.column_configs:
             if incoming.field_name not in CONFIGURABLE_FIELDS: continue
             config = self.db.scalar(select(ColumnConfig).where(ColumnConfig.field_name == incoming.field_name))
@@ -141,6 +229,7 @@ class SettingsService:
         if mode == "replace":
             self.db.execute(delete(Package)); self.db.flush()
         workflow = self.get_workflow_config()
+        default_project = self.default_project_code()
         order_index = (self.db.scalar(select(func.max(Package.order_index))) or -1) + 1
         for row in payload.rows:
             values = row.model_dump(exclude_none=True)
@@ -148,7 +237,7 @@ class SettingsService:
             if not number:
                 number = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
             defaults = {
-                "project_code":"NFS", "document_number": number, "document_title":"", "document_date": date.today(), "document_type":"", "initiator":"", "discipline":"",
+                "project_code":default_project, "document_number": number, "document_title":"", "document_date": date.today(), "document_type":"", "initiator":"", "discipline":"",
                 "number_of_documents":1, "transmittal_number":None, "workflow_number":None, "workflow_terminated":False,
                 "notes":"", "has_attachment":False, "is_abandoned":False,
                 "submission_progress":{step:False for step in workflow.submission_steps},
@@ -160,5 +249,6 @@ class SettingsService:
             self.db.add(Package(**defaults))
             created += 1
             order_index += 1
+        self.ensure_project_codes([row.project_code for row in payload.rows if row.project_code])
         self.db.commit()
         return {"mode":mode,"packages_created":created,"packages_updated":0,"configs_updated":0}

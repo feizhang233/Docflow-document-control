@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, WorkflowCommentList, WorkflowConfig } from '../types/package'
+import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
 const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api', timeout: 12_000 })
 
@@ -41,6 +41,8 @@ export const settingsApi = {
   resetColumns: async () => (await client.post<ColumnConfig[]>('/settings/columns/reset')).data,
   getWorkflow: async () => (await client.get<WorkflowConfig>('/settings/workflow')).data,
   updateWorkflow: async (data: Pick<WorkflowConfig,'submission_steps'|'feedback_reviewers'|'feedback_status_labels'|'feedback_status_colors'|'transmittal_prefixes'>) => (await client.put<WorkflowConfig>('/settings/workflow', data)).data,
+  getProjects: async () => (await client.get<ProjectConfig>('/settings/projects')).data,
+  updateProjects: async (data: {projects: Array<{id?: number; code: string; name: string}>}) => (await client.put<ProjectConfig>('/settings/projects', data)).data,
 }
 
 export const metadataApi = {

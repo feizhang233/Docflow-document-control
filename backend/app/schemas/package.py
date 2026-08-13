@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SUBMISSION_STEPS = ["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"]
@@ -7,7 +7,8 @@ LEGACY_MERGED_STEPS = ("Signature Process", "Workflow Initiation")
 MERGED_SUBMISSION_STEP = "Workflow Prepare"
 FEEDBACK_STEPS = ["UTIBER","GDS","Terminate"]
 FEEDBACK_STATUS_VALUES = {"A", "B", "C", "P"}
-ProjectCode = Literal["NFS", "FST", "FBP"]
+DEFAULT_PROJECT_CODE = "NFS"
+ProjectCode = Annotated[str, Field(min_length=2, max_length=16)]
 
 def merge_submission_steps(steps: list[str]) -> list[str]:
     cleaned = [str(step).strip() for step in steps]
@@ -31,7 +32,14 @@ def merge_submission_progress(progress: dict[str, bool] | None) -> dict[str, boo
     return merged
 
 class PackageBase(BaseModel):
-    project_code: ProjectCode = "NFS"
+    project_code: ProjectCode = DEFAULT_PROJECT_CODE
+    @field_validator("project_code", mode="before")
+    @classmethod
+    def normalize_project_code(cls, value):
+        if value is None:
+            return DEFAULT_PROJECT_CODE
+        cleaned = str(value).strip().upper()
+        return cleaned or DEFAULT_PROJECT_CODE
     document_number: str = Field(default="", max_length=80)
     document_title: str = Field(default="", max_length=255)
     document_date: date = Field(default_factory=date.today)
@@ -73,6 +81,13 @@ class PackageBase(BaseModel):
 class PackageCreate(PackageBase): pass
 class PackageUpdate(BaseModel):
     project_code: ProjectCode | None = None
+    @field_validator("project_code", mode="before")
+    @classmethod
+    def normalize_optional_project_code(cls, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip().upper()
+        return cleaned or None
     document_number: str | None = Field(default=None, max_length=80)
     document_title: str | None = Field(default=None, max_length=255)
     document_date: date | None = None

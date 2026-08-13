@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Save, X } from 'lucide-react'
 import type { ColumnConfig, InputColumnField, Package, PackageInput, ProjectCode, WorkflowConfig } from '../../types/package'
-import { feedbackSteps, projectCodes, submissionSteps, type FeedbackStatusCode } from '../../types/package'
-import { isAutomaticTransmittalNumber, projectLabels, transmittalPrefix } from '../../lib/projects'
+import { feedbackSteps, submissionSteps, type FeedbackStatusCode } from '../../types/package'
+import { useProjects } from '../../hooks/useProjects'
+import { isAutomaticTransmittalNumber, transmittalPrefix } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 
 const emptyProgress = Object.fromEntries(submissionSteps.map(s => [s, false])) as PackageInput['submission_progress']
 const emptyFeedback = {...Object.fromEntries(feedbackSteps.map(s => [s, false])),Terminate:false} as PackageInput['feedback']
 const today = () => new Date().toISOString().slice(0, 10)
-const blank: PackageInput = {
-  project_code: 'NFS',
+const blank = (project = 'NFS'): PackageInput => ({
+  project_code: project,
   document_number: '', document_title: '', document_date: today(), document_type: 'Drawing', initiator: '', discipline: '', number_of_documents: 1,
-  transmittal_number: transmittalPrefix('NFS','Drawing'), workflow_number: '', workflow_terminated:false, notes:'', has_attachment:false, is_abandoned:false,
+  transmittal_number: transmittalPrefix(project,'Drawing'), workflow_number: '', workflow_terminated:false, notes:'', has_attachment:false, is_abandoned:false,
   submission_progress: emptyProgress, feedback: emptyFeedback, feedback_status:{UTIBER:'P',GDS:'P'}, order_index: 0,
-}
+})
 type BaseField = InputColumnField
 const fields: Array<{ name: BaseField; label: string; placeholder?: string }> = [
   {name:'document_number',label:'Document number',placeholder:'Auto-generated if left blank'},
@@ -32,7 +33,8 @@ const fallback: Partial<Record<BaseField, string[]>> = {
 }
 
 export function PackageEditor({ item, configs, workflowConfig, open, saving, onClose, onSave }: { item: Package | null; configs: ColumnConfig[]; workflowConfig: WorkflowConfig; open: boolean; saving: boolean; onClose: () => void; onSave: (data: PackageInput) => void }) {
-  const [form, setForm] = useState<PackageInput>(blank)
+  const {projects, codes, labels, defaultCode} = useProjects()
+  const [form, setForm] = useState<PackageInput>(() => blank(defaultCode))
   const configMap = useMemo(() => Object.fromEntries(configs.map(c => [c.field_name,c])) as Partial<Record<BaseField,ColumnConfig>>, [configs])
   useEffect(() => {
     if (open) {
@@ -45,9 +47,9 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
       discipline:item.discipline, number_of_documents:item.number_of_documents, transmittal_number:item.transmittal_number,
       workflow_terminated:item.workflow_terminated, notes:item.notes, has_attachment:item.has_attachment, is_abandoned:item.is_abandoned,
       workflow_number:item.workflow_number, submission_progress:{...item.submission_progress}, feedback:{...item.feedback}, feedback_status:{...item.feedback_status}, order_index:item.order_index,
-    } : {...blank, project_code:'NFS', document_date:today(), document_type:defaultDocumentType, discipline:defaultDiscipline, transmittal_number:transmittalPrefix('NFS',defaultDocumentType), submission_progress:Object.fromEntries(workflowConfig.submission_steps.map(step=>[step,false])), feedback:{...Object.fromEntries(workflowConfig.feedback_reviewers.map(reviewer=>[reviewer,false])),Terminate:false},feedback_status:Object.fromEntries(workflowConfig.feedback_reviewers.map(reviewer=>[reviewer,'P']))})
+    } : {...blank(defaultCode), document_date:today(), document_type:defaultDocumentType, discipline:defaultDiscipline, transmittal_number:transmittalPrefix(defaultCode,defaultDocumentType), submission_progress:Object.fromEntries(workflowConfig.submission_steps.map(step=>[step,false])), feedback:{...Object.fromEntries(workflowConfig.feedback_reviewers.map(reviewer=>[reviewer,false])),Terminate:false},feedback_status:Object.fromEntries(workflowConfig.feedback_reviewers.map(reviewer=>[reviewer,'P']))})
     }
-  }, [item, open, workflowConfig, configMap])
+  }, [item, open, workflowConfig, configMap, defaultCode])
   if (!open) return null
   const set = <K extends keyof PackageInput>(key: K, value: PackageInput[K]) => setForm(prev => ({...prev,[key]:value}))
   const setBase = (field: BaseField, raw: string) => {
@@ -55,7 +57,7 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
     else if (field === 'document_type') setForm(previous => ({
       ...previous,
       document_type: raw,
-      transmittal_number: !item || !previous.transmittal_number || isAutomaticTransmittalNumber(previous.transmittal_number)
+      transmittal_number: !item || !previous.transmittal_number || isAutomaticTransmittalNumber(previous.transmittal_number, codes)
         ? transmittalPrefix(previous.project_code,raw)
         : previous.transmittal_number,
     }))
@@ -66,7 +68,7 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
     <form className="editor-modal" onSubmit={e=>{e.preventDefault();onSave({...form,document_date:form.document_date||today()})}}>
       <header><div><span className="eyebrow">{item?'Editing document':'New document'}</span><h2>{item?.document_number||'Create document'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></header>
       <div className="editor-body">
-        <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,transmittal_number:!previous.transmittal_number||isAutomaticTransmittalNumber(previous.transmittal_number)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{projectCodes.map(code=><option key={code} value={code}>{code} · {projectLabels[code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
+        <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,transmittal_number:!previous.transmittal_number||isAutomaticTransmittalNumber(previous.transmittal_number,codes)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{!projects.some(project=>project.code===form.project_code)&&form.project_code&&<option value={form.project_code}>{form.project_code}</option>}{projects.map(project=><option key={project.code} value={project.code}>{project.code} · {labels[project.code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
         <div className="form-grid">{fields.map(field => {
           const config=configMap[field.name]
           const options=config?.input_type==='select' ? config.options : fallback[field.name]

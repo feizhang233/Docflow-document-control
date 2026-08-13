@@ -1,8 +1,9 @@
 import { BarChart3, Building2, ChevronDown, FileText, Menu, Repeat2, Send, Settings, X } from 'lucide-react'
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { projectFilterFrom, projectLabels } from '../../lib/projects'
-import { projectCodes, type ProjectFilter } from '../../types/package'
+import { useProjects } from '../../hooks/useProjects'
+import { projectFilterFrom } from '../../lib/projects'
+import type { ProjectFilter } from '../../types/package'
 
 const documentLinks = [
   ['This Week', '/documents/week'], ['This Month', '/documents/month'],
@@ -14,7 +15,8 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
   const location=useLocation()
   const navigate=useNavigate()
   const [searchParams]=useSearchParams()
-  const selectedProject=projectFilterFrom(searchParams.get('project'))
+  const {codes,labels}=useProjects()
+  const selectedProject=projectFilterFrom(searchParams.get('project'),codes)
   const documentsActive=location.pathname.startsWith('/documents')
   const projectUrl=(url:string)=>selectedProject==='ALL'?url:`${url}?project=${selectedProject}`
   const changeProject=(project:ProjectFilter)=>{
@@ -30,9 +32,9 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
       <nav className="nav-list">
         <button className="sidebar-collapse-toggle" onClick={onToggleCollapsed} aria-label={collapsed?'Expand navigation':'Collapse navigation'} title={collapsed?'Expand navigation':'Collapse navigation'}><Menu size={19}/></button>
         <NavLink to="/" end className="nav-item" onClick={onClose} aria-label="Dashboard" title={collapsed?'Dashboard':undefined}><BarChart3 size={18}/><span>Dashboard</span></NavLink>
-        <label className="project-switcher" title={collapsed?projectLabels[selectedProject]:undefined}>
+        <label className="project-switcher" title={collapsed?labels[selectedProject]:undefined}>
           <Building2 size={18}/>
-          <span><small>Project</small><select aria-label="Select project" value={selectedProject} onChange={event=>changeProject(event.target.value as ProjectFilter)}><option value="ALL">All Projects</option>{projectCodes.map(code=><option key={code} value={code}>{code} · {projectLabels[code]}</option>)}</select></span>
+          <span><small>Project</small><select aria-label="Select project" value={selectedProject} onChange={event=>changeProject(event.target.value as ProjectFilter)}><option value="ALL">All Projects</option>{codes.map(code=><option key={code} value={code}>{code} · {labels[code]}</option>)}</select></span>
         </label>
         <div className={`nav-section ${documentsOpen?'expanded':'collapsed'}`}>
           <div className={`nav-parent-row ${documentsActive?'active':''}`}><NavLink to={projectUrl('/documents/week')} className="nav-parent" onClick={onClose} aria-label="Documents" title={collapsed?'Documents':undefined}><FileText size={18}/><span>Documents</span></NavLink><button type="button" className="nav-collapse-button" aria-label={documentsOpen?'Collapse Documents':'Expand Documents'} aria-expanded={documentsOpen} onClick={()=>setDocumentsOpen(open=>!open)}><ChevronDown size={15}/></button></div>

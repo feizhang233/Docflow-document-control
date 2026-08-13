@@ -2,7 +2,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.settings import ColumnConfigRead, ColumnConfigUpdate, ColumnVisibilityUpdate, CsvMetadataImport, MetadataExport, MetadataImport, MetadataImportResult, WorkflowConfigRead, WorkflowConfigUpdate
+from app.schemas.settings import ColumnConfigRead, ColumnConfigUpdate, ColumnVisibilityUpdate, CsvMetadataImport, MetadataExport, MetadataImport, MetadataImportResult, ProjectConfigRead, ProjectConfigUpdate, WorkflowConfigRead, WorkflowConfigUpdate
 from app.services.settings_service import SettingsService
 
 router = APIRouter(tags=["settings"])
@@ -30,6 +30,12 @@ def get_workflow_config(db: Session = Depends(get_db)): return SettingsService(d
 
 @router.put("/settings/workflow", response_model=WorkflowConfigRead)
 def update_workflow_config(data: WorkflowConfigUpdate, db: Session = Depends(get_db)): return SettingsService(db).update_workflow_config(data)
+
+@router.get("/settings/projects", response_model=ProjectConfigRead)
+def get_project_config(db: Session = Depends(get_db)): return SettingsService(db).project_config_payload()
+
+@router.put("/settings/projects", response_model=ProjectConfigRead)
+def update_project_config(data: ProjectConfigUpdate, db: Session = Depends(get_db)): return SettingsService(db).update_project_config(data)
 
 @router.get("/metadata/export", response_model=MetadataExport)
 def export_metadata(db: Session = Depends(get_db)): return SettingsService(db).export()

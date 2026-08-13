@@ -3,11 +3,24 @@ export const submissionSteps = [
 ] as const
 export const feedbackSteps = ['UTIBER', 'GDS'] as const
 export const feedbackStatusLabels = { A:'Approved', B:'Approved with comments', C:'Rejected', P:'Pending' } as const
-export const projectCodes = ['NFS', 'FST', 'FBP'] as const
+export const defaultProjectCodes = ['NFS', 'FST', 'FBP'] as const
 
 export type FeedbackStatusCode = keyof typeof feedbackStatusLabels
-export type ProjectCode = typeof projectCodes[number]
+export type ProjectCode = string
 export type ProjectFilter = ProjectCode | 'ALL'
+
+export interface ProjectSetting {
+  id: number
+  code: string
+  name: string
+  document_count: number
+}
+
+export interface ProjectConfig {
+  id: number
+  projects: ProjectSetting[]
+  updated_at: string
+}
 
 export interface Package {
   id: number
@@ -71,6 +84,7 @@ export interface MetadataBackup {
   packages: Array<Omit<Package, 'id'>>
   column_configs: ColumnConfig[]
   workflow_config: WorkflowConfig
+  project_config?: ProjectConfig
 }
 
 export interface CsvImportRow {

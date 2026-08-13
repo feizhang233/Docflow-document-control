@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, Download, FileJson, FileSpreadsheet, ListFilter, LoaderCircle, Plus, RotateCcw, Save, Upload, Workflow, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, Check, Download, FileJson, FileSpreadsheet, ListFilter, LoaderCircle, Plus, RotateCcw, Save, Upload, Workflow, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { SyncedHorizontalScroll } from '../components/common/SyncedHorizontalScroll'
 import { getApiError, metadataApi, packagesApi, settingsApi } from '../lib/api'
-import type { ColumnConfig, CsvImportRow, FeedbackStatusCode, MetadataBackup, WorkflowConfig } from '../types/package'
+import type { ColumnConfig, CsvImportRow, FeedbackStatusCode, MetadataBackup, ProjectConfig, WorkflowConfig } from '../types/package'
+import { useProjects } from '../hooks/useProjects'
 
 type ImportMode = 'merge'|'replace'
 type CsvImportPreview = { fileName:string; rows:CsvImportRow[] }
-type SettingsSection = 'columns'|'workflow'|'backup'
+type SettingsSection = 'columns'|'projects'|'workflow'|'backup'
 type ColumnRegister = 'documents'|'workflow'|'transmittal'
 const palette=['#3164ce','#7453be','#21815d','#b06a1d','#b13f4c','#9b4d80','#3970c7','#68717e']
 
@@ -25,6 +26,7 @@ export function SettingsPage() {
   const [columnRegister,setColumnRegister]=useState<ColumnRegister>('documents')
   const configs=useQuery({queryKey:['column-configs'],queryFn:settingsApi.listColumns})
   const workflowConfig=useQuery({queryKey:['workflow-config'],queryFn:settingsApi.getWorkflow})
+  const {query:projectConfig,codes:projectCodes}=useProjects()
   const resetColumns=useMutation({mutationFn:settingsApi.resetColumns,onSuccess:()=>{toast.success('Column settings reset to defaults');queryClient.invalidateQueries({queryKey:['column-configs']})},onError:e=>toast.error(getApiError(e))})
   const updateRegisterVisibility=useMutation({
     mutationFn:({field,register,isVisible}:{field:string;register:'workflow'|'transmittal';isVisible:boolean})=>settingsApi.updateColumnVisibility(field,register,isVisible),
@@ -60,12 +62,12 @@ export function SettingsPage() {
   }
   const chooseCsv=async(file?:File)=>{
     if(!file)return
-    try{const rows=parseDocumentCsv(await file.text());setCsvImport({fileName:file.name,rows});setCsvMode('merge')}
+    try{const rows=parseDocumentCsv(await file.text(),projectCodes);setCsvImport({fileName:file.name,rows});setCsvMode('merge')}
     catch(error){setCsvImport(null);toast.error(error instanceof Error?error.message:'This is not a valid document CSV')}
   }
   return <><div className="page-header"><div><div className="breadcrumb">Document Control <span>/</span> Settings</div><h1>Settings</h1><p>Control data backups and how document metadata is entered.</p></div></div>
     <div className="settings-layout settings-navigation-layout">
-      <nav className="settings-nav" aria-label="Settings sections"><button className={section==='columns'?'active':''} onClick={()=>setSection('columns')}><ListFilter/><span><strong>Columns & labels</strong><small>Width, names, colors</small></span></button><button className={section==='workflow'?'active':''} onClick={()=>setSection('workflow')}><Workflow/><span><strong>Workflow</strong><small>Stages, feedback, prefixes</small></span></button><button className={section==='backup'?'active':''} onClick={()=>setSection('backup')}><FileJson/><span><strong>Backup & restore</strong><small>JSON and CSV</small></span></button></nav>
+      <nav className="settings-nav" aria-label="Settings sections"><button className={section==='columns'?'active':''} onClick={()=>setSection('columns')}><ListFilter/><span><strong>Columns & labels</strong><small>Width, names, colors</small></span></button><button className={section==='projects'?'active':''} onClick={()=>setSection('projects')}><Building2/><span><strong>Project setting</strong><small>Count and names</small></span></button><button className={section==='workflow'?'active':''} onClick={()=>setSection('workflow')}><Workflow/><span><strong>Workflow</strong><small>Stages, feedback, prefixes</small></span></button><button className={section==='backup'?'active':''} onClick={()=>setSection('backup')}><FileJson/><span><strong>Backup & restore</strong><small>JSON and CSV</small></span></button></nav>
       <div className="settings-view">
       {section==='backup'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><FileJson/></span><div><h2>Metadata backup & restore</h2><p>Export all document metadata and field settings, or restore them from a DocFlow JSON backup.</p></div></div>
         <div className="backup-grid">
@@ -76,6 +78,9 @@ export function SettingsPage() {
         </div>
         {backup&&<div className="import-review"><div className="file-summary"><FileJson/><div><strong>{fileName}</strong><span>{backup.packages.length} documents · {backup.column_configs.length} field settings</span></div><button onClick={()=>{setBackup(null);setFileName('')}}><X/></button></div><label><span>Import behaviour</span><select value={mode} onChange={e=>setMode(e.target.value as 'merge'|'replace')}><option value="merge">Merge — append all records (same document number allowed for revisions)</option><option value="replace">Replace — delete current records, then restore this backup</option></select></label><button className="primary-button" disabled={importMutation.isPending} onClick={()=>importMutation.mutate()}>{importMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm import</button></div>}
         {csvImport&&<div className="import-review csv-import-review"><div className="file-summary"><FileSpreadsheet/><div><strong>{csvImport.fileName}</strong><span>{csvImport.rows.length} document rows · CSV data import</span></div><button onClick={()=>setCsvImport(null)}><X/></button></div><label><span>Import behaviour</span><select value={csvMode} onChange={e=>setCsvMode(e.target.value as ImportMode)}><option value="merge">Merge — append every row as a new record (revisions may share a document number)</option><option value="replace">Replace — delete current records, then import this CSV</option></select></label><button className="primary-button" disabled={csvImportMutation.isPending} onClick={()=>csvImportMutation.mutate()}>{csvImportMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm CSV import</button></div>}
+      </section>}
+      {section==='projects'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><Building2/></span><div><h2>Project setting</h2><p>Add, rename, or remove projects. The sidebar switcher and document editor use this list.</p></div></div>
+        {projectConfig.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading project settings…</div>:projectConfig.data?<ProjectConfigEditor config={projectConfig.data} onSaved={()=>{queryClient.invalidateQueries({queryKey:['project-config']});queryClient.invalidateQueries({queryKey:['packages']});queryClient.invalidateQueries({queryKey:['dashboard-packages']})}}/>:<div className="config-note"><strong>Project settings unavailable</strong><span>{projectConfig.error?getApiError(projectConfig.error):'Please refresh and try again.'}</span></div>}
       </section>}
       {section==='workflow'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><Workflow/></span><div><h2>Workflow & transmittal</h2><p>Edit Submission stages, Feedback behavior, and the quick-filter prefixes used by the Transmittal register.</p></div></div>
         {workflowConfig.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading workflow settings…</div>:workflowConfig.data?<WorkflowConfigEditor config={workflowConfig.data} onSaved={()=>{queryClient.invalidateQueries({queryKey:['workflow-config']});queryClient.invalidateQueries({queryKey:['packages']});queryClient.invalidateQueries({queryKey:['dashboard-packages']})}}/>:<div className="config-note"><strong>Workflow settings unavailable</strong><span>{workflowConfig.error?getApiError(workflowConfig.error):'Please refresh and try again.'}</span></div>}
@@ -135,7 +140,7 @@ function parseOptionalDate(value:string,row:number):string|undefined{
   return `${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
 }
 
-function parseDocumentCsv(text:string):CsvImportRow[]{
+function parseDocumentCsv(text:string,allowedProjects:string[]):CsvImportRow[]{
   const records=parseCsv(text)
   if(records.length<2)throw new Error('CSV must include a header row and at least one document')
   const headers=records[0].map((value,index)=>(index===0?value.replace(/^\uFEFF/,''):value).trim().toLowerCase())
@@ -151,7 +156,7 @@ function parseDocumentCsv(text:string):CsvImportRow[]{
     const value:CsvImportRow={}
     const rowNumber=rowIndex+2
     // Only send fields that actually have values so empty cells do not fail API validation.
-    if(has('project_code')&&textValue('project_code')){const project=textValue('project_code').toUpperCase();if(!['NFS','FST','FBP'].includes(project))throw new Error(`Row ${rowNumber}: project_code must be NFS, FST, or FBP`);value.project_code=project as CsvImportRow['project_code']}
+    if(has('project_code')&&textValue('project_code')){const project=textValue('project_code').toUpperCase();if(!allowedProjects.includes(project))throw new Error(`Row ${rowNumber}: project_code must be one of ${allowedProjects.join(', ')}`);value.project_code=project}
     if(has('document_number')&&textValue('document_number'))value.document_number=textValue('document_number')
     if(has('document_title'))value.document_title=textValue('document_title')
     if(has('document_date')){const date=parseOptionalDate(cells.document_date??'',rowNumber);if(date)value.document_date=date}
@@ -162,6 +167,38 @@ function parseDocumentCsv(text:string):CsvImportRow[]{
     for(const field of ['workflow_terminated','has_attachment','is_abandoned'] as const)if(has(field)){const parsed=parseBoolean(cells[field],field,rowNumber);if(parsed!==undefined)value[field]=parsed}
     return value
   })
+}
+
+type ProjectDraft = {key:string;id?:number;code:string;name:string;document_count:number}
+
+function ProjectConfigEditor({config,onSaved}:{config:ProjectConfig;onSaved:()=>void}){
+  const [projects,setProjects]=useState<ProjectDraft[]>(()=>config.projects.map(project=>({key:`project-${project.id}`,id:project.id,code:project.code,name:project.name,document_count:project.document_count})))
+  useEffect(()=>{setProjects(config.projects.map(project=>({key:`project-${project.id}`,id:project.id,code:project.code,name:project.name,document_count:project.document_count})))},[config])
+  const save=useMutation({
+    mutationFn:()=>settingsApi.updateProjects({projects:projects.map(project=>({id:project.id,code:project.code,name:project.name}))}),
+    onSuccess:()=>{toast.success('Project settings updated');onSaved()},
+    onError:e=>toast.error(getApiError(e)),
+  })
+  const codes=projects.map(project=>project.code.trim().toUpperCase())
+  const invalid=!projects.length||projects.some(project=>!/^[A-Z0-9]{2,12}$/.test(project.code.trim().toUpperCase())||!project.name.trim())||new Set(codes).size!==codes.length
+  const addProject=()=>setProjects(previous=>[...previous,{key:`draft-${Date.now()}-${Math.random()}`,code:'',name:'',document_count:0}])
+  const removeProject=(key:string)=>setProjects(previous=>previous.length===1?previous:previous.filter(project=>project.key!==key))
+  return <div className="project-config-editor">
+    <div className="workflow-config-block">
+      <div className="workflow-config-title"><div><strong>Projects</strong><span>Code is the short identifier used on documents. Name is shown in the project switcher.</span></div><small>{projects.length} {projects.length===1?'project':'projects'}</small></div>
+      <div className="project-config-list">
+        {projects.map((project,index)=><div className="project-config-row" key={project.key}>
+          <b>{index+1}</b>
+          <label><span>Code</span><input value={project.code} maxLength={12} aria-label={`Project ${index+1} code`} onChange={event=>setProjects(previous=>previous.map(item=>item.key===project.key?{...item,code:event.target.value.toUpperCase()}:item))}/></label>
+          <label><span>Name</span><input value={project.name} maxLength={80} aria-label={`Project ${index+1} name`} onChange={event=>setProjects(previous=>previous.map(item=>item.key===project.key?{...item,name:event.target.value}:item))}/></label>
+          <small>{project.document_count} {project.document_count===1?'document':'documents'}</small>
+          <button type="button" aria-label={`Remove ${project.code||'project'}`} disabled={projects.length===1||project.document_count>0} title={project.document_count>0?'Move or delete documents before removing this project':'Remove project'} onClick={()=>removeProject(project.key)}><X/></button>
+        </div>)}
+      </div>
+      <button type="button" className="secondary-button project-config-add" disabled={projects.length>=20} onClick={addProject}><Plus/> Add project</button>
+    </div>
+    <div className="workflow-config-actions"><p>Renaming a code updates existing documents. A project with documents cannot be removed.</p><button className="primary-button" disabled={save.isPending||invalid} onClick={()=>save.mutate()}>{save.isPending?<LoaderCircle className="spin"/>:<Save/>} Save project setting</button></div>
+  </div>
 }
 
 function WorkflowConfigEditor({config,onSaved}:{config:WorkflowConfig;onSaved:()=>void}){

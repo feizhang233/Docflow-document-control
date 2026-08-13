@@ -4,13 +4,15 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { notificationsApi, packagesApi, settingsApi } from '../lib/api'
 import { getEffectiveFeedbackStatus } from '../components/packages/FeedbackStatus'
 import { feedbackStatusLabels, feedbackSteps, submissionSteps, type FeedbackStatusCode, type Package, type ProjectFilter, type WorkflowNotification } from '../types/package'
-import { projectFilterFrom, projectLabels } from '../lib/projects'
+import { useProjects } from '../hooks/useProjects'
+import { projectFilterFrom } from '../lib/projects'
 
 const defaultColors:Record<FeedbackStatusCode,string>={A:'#21815d',B:'#9b6816',C:'#b13f4c',P:'#4267bd'}
 
 export function DashboardPage() {
   const [searchParams]=useSearchParams()
-  const selectedProject=projectFilterFrom(searchParams.get('project'))
+  const {codes,labels}=useProjects()
+  const selectedProject=projectFilterFrom(searchParams.get('project'),codes)
   const projectCode=selectedProject==='ALL'?undefined:selectedProject
   const {data}=useQuery({queryKey:['dashboard-packages',selectedProject],queryFn:()=>packagesApi.listAll({period:'all',project_code:projectCode})})
   const {data:workflowConfig}=useQuery({queryKey:['workflow-config'],queryFn:settingsApi.getWorkflow})
@@ -57,9 +59,9 @@ export function DashboardPage() {
   const dateLabel=today.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
   const registerSearch=(project:ProjectFilter=selectedProject,extra:Record<string,string>={})=>{const params=new URLSearchParams(extra);if(project!=='ALL')params.set('project',project);return params.toString()?`?${params}`:''}
   return <>
-    <div className="page-header dashboard-heading"><div><div className="breadcrumb">{dateLabel} <span>/</span> {projectLabels[selectedProject]}</div><h1>Good morning, Zhang</h1><p>Here’s what needs attention across {projectLabels[selectedProject].toLowerCase()}.</p></div><Link className="primary-button" to={`/documents/week${registerSearch()}`}>Open register <ArrowRight size={16}/></Link></div>
+    <div className="page-header dashboard-heading"><div><div className="breadcrumb">{dateLabel} <span>/</span> {labels[selectedProject]}</div><h1>Good morning, Zhang</h1><p>Here’s what needs attention across {labels[selectedProject].toLowerCase()}.</p></div><Link className="primary-button" to={`/documents/week${registerSearch()}`}>Open register <ArrowRight size={16}/></Link></div>
     <div className="metric-grid">
-      <Metric icon={<Files/>} tone="blue" label="Total documents" value={data?.total||0} note={projectLabels[selectedProject]}/>
+      <Metric icon={<Files/>} tone="blue" label="Total documents" value={data?.total||0} note={labels[selectedProject]}/>
       <Metric icon={<Clock3/>} tone="amber" label="Active workflows" value={active} note="In submission process"/>
       <Metric icon={<CheckCircle2/>} tone="green" label="Completed" value={complete} note="All submission stages complete"/>
       <Metric icon={<FileCheck2/>} tone="purple" label="Awaiting feedback" value={feedbackPending} note={`${currentFeedbackReviewers.join(' or ')} pending`}/>

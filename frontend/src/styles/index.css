@@ -30,7 +30,7 @@
 .project-switcher>svg{width:18px;flex:none;color:#7697ff}.project-switcher>span{display:block;min-width:0;flex:1}.project-switcher small{display:block;margin:0 0 2px;color:#74829b;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}.project-switcher select{display:block;width:100%;border:0;outline:0;background:transparent;color:#fff;font-size:12px;font-weight:600;padding:0;cursor:pointer}.project-switcher select option{background:#172440;color:#fff}
 .desktop-collapsed .project-switcher{height:42px;padding:0;justify-content:center}.desktop-collapsed .project-switcher>span{display:none}
 .project-choice{display:grid;grid-template-columns:145px minmax(220px,1fr) minmax(200px,1fr);align-items:center;gap:12px;margin-bottom:16px;padding:13px 14px;border:1px solid #dbe3f3;border-radius:10px;background:#f6f8fd}.project-choice>span{font-size:12px;font-weight:700;color:#2e405f}.project-choice select{height:40px;border:1px solid #cad5e8;border-radius:8px;background:white;padding:0 11px;color:#253a60;font-size:12px;font-weight:600;outline:0}.project-choice select:focus{border-color:#7393e6;box-shadow:0 0 0 3px #e9efff}.project-choice small{color:#7d899c;font-size:10px;line-height:1.4}
-.identifier-cell .project-tag,.project-badge,.dashboard-project{width:max-content;display:inline-flex;align-items:center;border-radius:5px;font-weight:800;letter-spacing:.05em}.identifier-cell .project-tag{margin-top:5px;padding:2px 5px;font-size:8px}.project-badge{border:0}.project-nfs{background:#e9efff!important;color:#315fc7!important}.project-fst{background:#fff0dc!important;color:#a35b0d!important}.project-fbp{background:#e3f6ef!important;color:#197658!important}.dashboard-project{margin-right:6px;padding:2px 5px;font-size:8px;vertical-align:1px}.dashboard-list>a>div:nth-child(2)>span .dashboard-project{display:inline-flex}
+.project-badge,.dashboard-project{width:max-content;display:inline-flex;align-items:center;border-radius:5px;font-weight:800;letter-spacing:.05em;background:#eef2f8;color:#40516d}.project-badge{border:0}.project-nfs{background:#e9efff!important;color:#315fc7!important}.project-fst{background:#fff0dc!important;color:#a35b0d!important}.project-fbp{background:#e3f6ef!important;color:#197658!important}.dashboard-project{margin-right:6px;padding:2px 5px;font-size:8px;vertical-align:1px}.dashboard-list>a>div:nth-child(2)>span .dashboard-project{display:inline-flex}
 @media(max-width:760px){.desktop-collapsed .project-switcher{height:56px;padding:8px 10px;justify-content:flex-start}.desktop-collapsed .project-switcher>span{display:block}.project-choice{grid-template-columns:1fr;gap:7px}}
 
 /* Settings should remain easy to scan without stretching each section vertically. */
@@ -229,28 +229,64 @@
   .bulk-toggle-grid{grid-template-columns:1fr}
 }
 
-/* Dual-synced top horizontal scrollbar for wide tables (registers + settings).
-   Always visible (常亮) — not auto-hidden until hover/scroll or only-on-overflow. */
+/* Custom always-visible (常亮) top horizontal scrollbar for wide tables.
+   Native overlay scrollbars auto-hide on Linux/Chrome — paint our own track/thumb. */
 .synced-hscroll{position:relative;min-width:0}
-.synced-hscroll-top{
-  overflow-x:scroll;
-  overflow-y:hidden;
+.synced-hscroll-track{
+  position:relative;
   height:12px;
-  max-height:12px;
-  margin-bottom:1px;
-  border-bottom:1px solid #eef1f5;
-  background:#f3f5f8;
-  scrollbar-width:thin;
-  scrollbar-color:#9aa6b8 #e4e8ef;
-  scrollbar-gutter:stable;
+  margin-bottom:4px;
+  border:1px solid #d8dee8;
+  border-radius:6px;
+  background:#e8ecf2;
+  cursor:pointer;
+  flex-shrink:0;
+  user-select:none;
+  touch-action:none;
 }
-.synced-hscroll-top::-webkit-scrollbar{height:10px}
-.synced-hscroll-top::-webkit-scrollbar-track{background:#e4e8ef;border-radius:4px}
-.synced-hscroll-top::-webkit-scrollbar-thumb{background:#9aa6b8;border-radius:4px;border:2px solid #e4e8ef;background-clip:padding-box;min-width:40px}
-.synced-hscroll-top::-webkit-scrollbar-thumb:hover{background:#7d8a9e;border:2px solid #e4e8ef;background-clip:padding-box}
-.synced-hscroll-spacer{height:1px;pointer-events:none}
-.synced-hscroll .table-scroll{overflow:auto}
+.synced-hscroll-thumb{
+  position:absolute;
+  top:1px;
+  bottom:1px;
+  min-width:40px;
+  border-radius:4px;
+  background:#8b97ab;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);
+  cursor:grab;
+  touch-action:none;
+}
+.synced-hscroll-thumb:hover,
+.synced-hscroll-thumb:active{background:#6f7d93}
+.synced-hscroll-thumb:active{cursor:grabbing}
+.synced-hscroll-thumb.is-full{cursor:default;opacity:.45;min-width:0}
+/* Hide native horizontal scrollbar on content; custom track is the only control. */
+.synced-hscroll-body,
+.synced-hscroll .table-scroll,
+.synced-hscroll .config-table-scroll-body{
+  overflow-x:auto;
+  overflow-y:auto;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.synced-hscroll-body::-webkit-scrollbar,
+.synced-hscroll .table-scroll::-webkit-scrollbar,
+.synced-hscroll .config-table-scroll-body::-webkit-scrollbar{display:none;height:0;width:0}
 .config-table-scroll{margin:0 0 4px}
 .config-table-scroll-body{overflow:auto}
 .config-table-block{min-width:950px}
 .config-table-scroll .config-list{overflow-x:visible}
+
+.project-config-editor{display:flex;flex-direction:column;gap:14px}
+.project-config-list{display:flex;flex-direction:column;gap:8px}
+.project-config-row{display:grid;grid-template-columns:30px 140px minmax(180px,1fr) 92px 36px;gap:8px;align-items:end}
+.project-config-row b{width:30px;height:42px;border-radius:50%;display:grid;place-items:center;background:#edf2ff;color:#4769bd;font-size:10px;align-self:end}
+.project-config-row label span{display:block;font-size:10px;color:#68758a;margin-bottom:5px}
+.project-config-row input{width:100%;height:42px;border:1px solid #dce2eb;border-radius:7px;padding:0 11px;font-size:12px;color:#34435b;outline:none}
+.project-config-row input:focus{border-color:#7393e6;box-shadow:0 0 0 3px #edf2ff}
+.project-config-row small{font-size:10px;color:#7d899a;padding-bottom:12px;white-space:nowrap}
+.project-config-row button{width:36px;height:42px;border:1px solid #dfe4ec;border-radius:7px;background:white;color:#6d7c91;display:grid;place-items:center}
+.project-config-row button:hover:not(:disabled){background:#fff0f1;color:#b13f4c;border-color:#efc4c9}
+.project-config-row button:disabled{opacity:.35}
+.project-config-row svg{width:15px}
+.project-config-add{width:max-content;margin-top:10px}
+@media(max-width:760px){.project-config-row{grid-template-columns:30px 1fr 36px;grid-template-areas:"index code remove" "index name name" ". count ."}.project-config-row b{grid-area:index}.project-config-row label:first-of-type{grid-area:code}.project-config-row label:last-of-type{grid-area:name}.project-config-row small{grid-area:count;padding-bottom:0}.project-config-row button{grid-area:remove}}

@@ -27,6 +27,37 @@ def test_package_crud(client):
     assert updated.json()["number_of_documents"]==9
     assert client.delete(f"/api/packages/{created['id']}").status_code==204
 
+def test_project_settings_can_add_rename_and_block_in_use_delete(client):
+    current = client.get("/api/settings/projects")
+    assert current.status_code == 200
+    projects = current.json()["projects"]
+    assert [item["code"] for item in projects] == ["NFS", "FST", "FBP"]
+    assert projects[0]["name"] == "NFS Main Project"
+
+    nfs = client.post("/api/packages", json=payload("NFS-DOC-001")).json()
+    assert nfs["project_code"] == "NFS"
+    blocked = client.put("/api/settings/projects", json={"projects":[
+        {"id":projects[1]["id"], "code":"FST", "name":"Fire Station"},
+        {"id":projects[2]["id"], "code":"FBP", "name":"Footbridge"},
+    ]})
+    assert blocked.status_code == 400
+    assert "NFS" in blocked.json()["detail"]
+
+    renamed = client.put("/api/settings/projects", json={"projects":[
+        {"id":projects[0]["id"], "code":"MAIN", "name":"Main Works"},
+        {"id":projects[1]["id"], "code":"FST", "name":"Fire Station"},
+        {"id":projects[2]["id"], "code":"FBP", "name":"Footbridge"},
+        {"code":"NEW", "name":"New Site"},
+    ]})
+    assert renamed.status_code == 200, renamed.text
+    codes = [item["code"] for item in renamed.json()["projects"]]
+    assert codes == ["MAIN", "FST", "FBP", "NEW"]
+    assert client.get(f"/api/packages/{nfs['id']}").json()["project_code"] == "MAIN"
+    created = client.post("/api/packages", json=payload("NEW-DOC-001") | {"project_code":"NEW"}).json()
+    assert created["project_code"] == "NEW"
+    unknown = client.post("/api/packages", json=payload("BAD-DOC") | {"project_code":"ZZZ"})
+    assert unknown.status_code == 422
+
 def test_project_assignment_and_register_filtering(client):
     nfs = client.post("/api/packages", json=payload("NFS-DOC-001")).json()
     fst_payload = payload("FST-DOC-001") | {"project_code":"FST", "transmittal_number":"FST-PCH-TRA-RPT-001"}

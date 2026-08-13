@@ -7,7 +7,7 @@ class Package(Base):
     __tablename__ = "packages"
     __table_args__ = (Index("ix_packages_created_at", "created_at"), Index("ix_packages_order_index", "order_index"), Index("ix_packages_project_code", "project_code"), Index("ix_packages_is_abandoned", "is_abandoned"), Index("ix_packages_workflow_terminated", "workflow_terminated"))
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_code: Mapped[str] = mapped_column(String(3), default="NFS", nullable=False)
+    project_code: Mapped[str] = mapped_column(String(16), default="NFS", nullable=False)
     # Not unique: the same document number can appear as multiple revisions / submissions.
     document_number: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     document_title: Mapped[str] = mapped_column(String(255), default="", nullable=False)

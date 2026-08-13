@@ -1,7 +1,10 @@
+import re
 from datetime import date, datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.package import PackageCreate, ProjectCode, merge_submission_steps
+
+PROJECT_CODE_PATTERN = re.compile(r"^[A-Z0-9]{2,12}$")
 
 CONFIGURABLE_FIELDS = {
     "document_number", "document_title", "document_date", "document_type", "initiator", "discipline",
@@ -111,18 +114,60 @@ class MetadataPackage(PackageCreate):
     updated_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
+class ProjectItem(BaseModel):
+    id: int | None = None
+    code: str = Field(min_length=2, max_length=12)
+    name: str = Field(min_length=1, max_length=80)
+    document_count: int = 0
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_project_code(cls, value):
+        cleaned = str(value or "").strip().upper()
+        if not PROJECT_CODE_PATTERN.fullmatch(cleaned):
+            raise ValueError("Project code must be 2–12 letters or numbers")
+        if cleaned == "ALL":
+            raise ValueError("ALL is reserved for the all-projects filter")
+        return cleaned
+
+    @field_validator("name")
+    @classmethod
+    def clean_project_name(cls, value: str):
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Project name is required")
+        return cleaned
+
+class ProjectConfigUpdate(BaseModel):
+    projects: list[ProjectItem] = Field(min_length=1, max_length=20)
+
+    @field_validator("projects")
+    @classmethod
+    def validate_unique_codes(cls, value: list[ProjectItem]):
+        codes = [item.code for item in value]
+        if len(set(codes)) != len(codes):
+            raise ValueError("Project codes must be unique")
+        return value
+
+class ProjectConfigRead(BaseModel):
+    id: int
+    projects: list[ProjectItem]
+    updated_at: datetime
+
 class MetadataExport(BaseModel):
     format_version: Literal["1.0"] = "1.0"
     exported_at: datetime
     packages: list[MetadataPackage]
     column_configs: list[ColumnConfigRead]
     workflow_config: WorkflowConfigRead
+    project_config: ProjectConfigRead | None = None
 
 class MetadataImport(BaseModel):
     format_version: Literal["1.0"]
     packages: list[MetadataPackage] = Field(default_factory=list, max_length=10000)
     column_configs: list[ColumnConfigRead] = Field(default_factory=list)
     workflow_config: WorkflowConfigUpdate | None = None
+    project_config: ProjectConfigUpdate | None = None
 
 class MetadataImportResult(BaseModel):
     mode: Literal["merge", "replace"]
@@ -146,8 +191,17 @@ class CsvImportRow(BaseModel):
     is_abandoned: bool | None = None
     notes: str | None = Field(default=None, max_length=5000)
 
+    @field_validator("project_code", mode="before")
+    @classmethod
+    def normalize_csv_project_code(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return str(value).strip().upper()
+
     @field_validator(
-        "project_code", "document_number", "document_title", "document_type", "initiator", "discipline",
+        "document_number", "document_title", "document_type", "initiator", "discipline",
         "transmittal_number", "workflow_number", "notes",
         mode="before",
     )

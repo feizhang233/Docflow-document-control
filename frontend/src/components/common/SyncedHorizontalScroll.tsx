@@ -14,8 +14,8 @@ interface Props {
 }
 
 /**
- * Horizontal scroll region with a slim dual-synced top scrollbar.
- * Top track is always visible (常亮); content still syncs bidirectionally.
+ * Horizontal scroll region with a custom dual-synced top scrollbar.
+ * Track is always painted (常亮); does not rely on native overlay scrollbars.
  */
 export function SyncedHorizontalScroll({
   children,
@@ -25,29 +25,40 @@ export function SyncedHorizontalScroll({
   'aria-label': ariaLabel,
 }: Props) {
   const {
-    topRef,
     bottomRef,
-    spacerRef,
-    overflowing,
-    onTopScroll,
+    trackRef,
+    metrics,
     onBottomScroll,
+    onThumbPointerDown,
+    onTrackPointerDown,
   } = useSyncedHorizontalScroll(deps)
 
+  const { overflowing, thumbWidthPct, thumbLeftPct } = metrics
+
   return (
-    <div className={`synced-hscroll${className ? ` ${className}` : ''}${overflowing ? ' is-overflowing' : ''}`}>
+    <div
+      className={`synced-hscroll${className ? ` ${className}` : ''}${overflowing ? ' is-overflowing' : ''}`}
+    >
       <div
-        ref={topRef}
-        className="synced-hscroll-top"
-        onScroll={onTopScroll}
-        aria-hidden={false}
-        tabIndex={0}
+        ref={trackRef}
+        className="synced-hscroll-track"
+        onPointerDown={onTrackPointerDown}
+        role="scrollbar"
+        aria-orientation="horizontal"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(thumbLeftPct)}
         title={overflowing ? 'Horizontal scroll' : 'Table fits the view'}
       >
-        <div ref={spacerRef} className="synced-hscroll-spacer" />
+        <div
+          className={`synced-hscroll-thumb${overflowing ? '' : ' is-full'}`}
+          style={{ width: `${thumbWidthPct}%`, left: `${thumbLeftPct}%` }}
+          onPointerDown={onThumbPointerDown}
+        />
       </div>
       <div
         ref={bottomRef}
-        className={contentClassName}
+        className={`${contentClassName} synced-hscroll-body`}
         onScroll={onBottomScroll}
         aria-label={ariaLabel}
       >

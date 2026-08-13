@@ -12,7 +12,8 @@ import { PackageEditor } from '../components/packages/PackageEditor'
 import { BulkPackageEditor, type BulkPackagePatch } from '../components/packages/BulkPackageEditor'
 import { AdvancedFilter } from '../components/packages/AdvancedFilter'
 import { useDismissableLayer } from '../hooks/useDismissableLayer'
-import { prefixesForProject, projectFilterFrom, projectLabels } from '../lib/projects'
+import { useProjects } from '../hooks/useProjects'
+import { prefixesForProject, projectFilterFrom } from '../lib/projects'
 
 const meta = {
   documents: ['Documents', 'Manage submissions and monitor every stage of your document register.'],
@@ -33,7 +34,8 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const { period: routePeriod } = useParams()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const selectedProject = projectFilterFrom(searchParams.get('project'))
+  const {codes, labels} = useProjects()
+  const selectedProject = projectFilterFrom(searchParams.get('project'), codes)
   const focusParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const focusValue = focusParams.get('focus') || ''
   const focusPackageId = Number(focusParams.get('package')) || null
@@ -65,7 +67,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const workflowConfig = workflowQuery.data || defaultWorkflowConfig
   const currentSubmissionSteps = workflowConfig.submission_steps
   const currentFeedbackReviewers = workflowConfig.feedback_reviewers
-  const transmittalPrefixes = useMemo(() => prefixesForProject(workflowConfig.transmittal_prefixes, selectedProject), [workflowConfig.transmittal_prefixes, selectedProject])
+  const transmittalPrefixes = useMemo(() => prefixesForProject(workflowConfig.transmittal_prefixes, selectedProject, codes), [workflowConfig.transmittal_prefixes, selectedProject, codes])
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['packages'] })
   const save = useMutation({
     mutationFn: (data: PackageInput) => (editing ? packagesApi.update(editing.id, data) : packagesApi.create(data)),
@@ -291,7 +293,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     <>
       <div className="page-header">
         <div>
-          <div className="breadcrumb">Document Control <span>/</span> {projectLabels[selectedProject]} <span>/</span> {kind === 'documents' ? titlePeriod : meta[kind][0]}</div>
+          <div className="breadcrumb">Document Control <span>/</span> {labels[selectedProject]} <span>/</span> {kind === 'documents' ? titlePeriod : meta[kind][0]}</div>
           <h1>{meta[kind][0]}</h1>
           <p>{meta[kind][1]}</p>
         </div>
@@ -387,7 +389,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         )}
         <div className="result-strip">
           <div>
-            <strong>{filters.length ? visibleItems.length : query.data?.total ?? '—'}</strong> documents <span>·</span> {projectLabels[selectedProject]} <span>·</span> {titlePeriod}
+            <strong>{filters.length ? visibleItems.length : query.data?.total ?? '—'}</strong> documents <span>·</span> {labels[selectedProject]} <span>·</span> {titlePeriod}
             {filters.length > 0 && <span>· {filters.length} filters</span>}
             {selectionMode && <span>· Selection mode</span>}
           </div>
