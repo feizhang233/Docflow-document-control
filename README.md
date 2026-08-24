@@ -4,10 +4,11 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 
 ## Features
 
+- Sign-in, roles, and project-scoped access (Administrator, Document Controller, Editor, Viewer)
 - Dashboard with package and workflow health metrics
 - Documents register with This Week (default), This Month, This Year, and All views
 - Dedicated Workflow and Transmittal registers with correct default sorting
-- Configurable four-stage Submission progress and two-reviewer Feedback tracking
+- Configurable Submission Progress stages (count and names), with optional per-project overrides, and two-reviewer Feedback tracking
 - Document Number and document date (day precision) in every package's basic information
 - Search, discipline filter, column sorting, CSV export, and drag-to-reorder
 - Create/edit modal, package detail drawer, optimistic order updates, and saved MySQL state
@@ -68,7 +69,7 @@ Vite proxies `/api` to `http://localhost:8000`. Override this with `VITE_API_URL
 
 ## API
 
-All internal, notification, backup, and external automation endpoints are documented in [API.md](API.md). Configure `EXTERNAL_API_KEY` before connecting a synchronization script.
+All internal, notification, backup, IAM, and external automation endpoints are documented in [API.md](API.md). Configure `EXTERNAL_API_KEY` and `AUTH_SECRET` before deployment. The first empty database creates `BOOTSTRAP_ADMIN_USERNAME` with `BOOTSTRAP_ADMIN_PASSWORD`.
 
 ## Migrations and tests
 

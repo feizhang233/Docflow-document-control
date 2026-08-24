@@ -1,6 +1,7 @@
 import { BarChart3, Building2, ChevronDown, FileText, Menu, Repeat2, Send, Settings, X } from 'lucide-react'
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
+import { useAuth } from '../../hooks/useAuth'
 import { useProjects } from '../../hooks/useProjects'
 import { projectFilterFrom } from '../../lib/projects'
 import type { ProjectFilter } from '../../types/package'
@@ -15,8 +16,10 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
   const location=useLocation()
   const navigate=useNavigate()
   const [searchParams]=useSearchParams()
-  const {codes,labels}=useProjects()
-  const selectedProject=projectFilterFrom(searchParams.get('project'),codes)
+  const {codes,labels,canSeeAll}=useProjects()
+  const {can}=useAuth()
+  const showSettings=can('settings:write')||can('metadata:export')||can('metadata:import')||can('iam:read')
+  const selectedProject=projectFilterFrom(searchParams.get('project'),codes,canSeeAll)
   const documentsActive=location.pathname.startsWith('/documents')
   const projectUrl=(url:string)=>selectedProject==='ALL'?url:`${url}?project=${selectedProject}`
   const changeProject=(project:ProjectFilter)=>{
@@ -34,7 +37,7 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
         <NavLink to="/" end className="nav-item" onClick={onClose} aria-label="Dashboard" title={collapsed?'Dashboard':undefined}><BarChart3 size={18}/><span>Dashboard</span></NavLink>
         <label className="project-switcher" title={collapsed?labels[selectedProject]:undefined}>
           <Building2 size={18}/>
-          <span><small>Project</small><select aria-label="Select project" value={selectedProject} onChange={event=>changeProject(event.target.value as ProjectFilter)}><option value="ALL">All Projects</option>{codes.map(code=><option key={code} value={code}>{code} · {labels[code]}</option>)}</select></span>
+          <span><small>Project</small><select aria-label="Select project" value={selectedProject} onChange={event=>changeProject(event.target.value as ProjectFilter)}>{canSeeAll&&<option value="ALL">All Projects</option>}{codes.map(code=><option key={code} value={code}>{code} · {labels[code]}</option>)}</select></span>
         </label>
         <div className={`nav-section ${documentsOpen?'expanded':'collapsed'}`}>
           <div className={`nav-parent-row ${documentsActive?'active':''}`}><NavLink to={projectUrl('/documents/week')} className="nav-parent" onClick={onClose} aria-label="Documents" title={collapsed?'Documents':undefined}><FileText size={18}/><span>Documents</span></NavLink><button type="button" className="nav-collapse-button" aria-label={documentsOpen?'Collapse Documents':'Expand Documents'} aria-expanded={documentsOpen} onClick={()=>setDocumentsOpen(open=>!open)}><ChevronDown size={15}/></button></div>
@@ -44,7 +47,7 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
         <NavLink to={projectUrl('/transmittal')} className="nav-item" onClick={onClose} aria-label="Transmittal" title={collapsed?'Transmittal':undefined}><Send size={18}/><span>Transmittal</span></NavLink>
       </nav>
       <div className="sidebar-bottom">
-        <NavLink to="/settings" className="nav-item" onClick={onClose} aria-label="Settings" title={collapsed?'Settings':undefined}><Settings size={18}/><span>Settings</span></NavLink>
+        {showSettings&&<NavLink to="/settings" className="nav-item" onClick={onClose} aria-label="Settings" title={collapsed?'Settings':undefined}><Settings size={18}/><span>Settings</span></NavLink>}
       </div>
     </aside>
   </>

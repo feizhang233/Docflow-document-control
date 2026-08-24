@@ -72,6 +72,9 @@ export interface ColumnConfig {
   input_type: 'text' | 'select'
   options: string[]
   option_colors: Record<string,string>
+  share_options: boolean
+  project_options: Record<string, string[]>
+  project_option_colors: Record<string, Record<string, string>>
   updated_at: string
 }
 
@@ -107,6 +110,7 @@ export interface CsvImportRow {
 export interface WorkflowConfig {
   id: number
   submission_steps: string[]
+  project_submission_steps: Record<string, string[]>
   feedback_reviewers: string[]
   feedback_status_labels: Record<FeedbackStatusCode,string>
   feedback_status_colors: Record<FeedbackStatusCode,string>

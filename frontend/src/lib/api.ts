@@ -1,7 +1,48 @@
 import axios from 'axios'
+import type { AuditEventList, AuthUser, Permission, Role, UserCreateInput, UserList, UserUpdateInput } from '../types/iam'
 import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
-const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api', timeout: 12_000 })
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  timeout: 12_000,
+  withCredentials: true,
+})
+
+client.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config as { url?: string; _retry?: boolean } | undefined
+    const url = original?.url || ''
+    if (error.response?.status === 401 && original && !original._retry && !url.includes('/auth/')) {
+      original._retry = true
+      try {
+        await client.post('/auth/refresh')
+        return client(original)
+      } catch {
+        window.dispatchEvent(new Event('docflow:unauthorized'))
+      }
+    }
+    return Promise.reject(error)
+  },
+)
+
+export const authApi = {
+  login: async (username: string, password: string) => (await client.post<AuthUser>('/auth/login', { username, password })).data,
+  logout: async () => client.post('/auth/logout'),
+  me: async () => (await client.get<AuthUser>('/auth/me')).data,
+  refresh: async () => (await client.post<AuthUser>('/auth/refresh')).data,
+  changePassword: async (current_password: string, new_password: string) => (await client.post<AuthUser>('/auth/change-password', { current_password, new_password })).data,
+}
+
+export const iamApi = {
+  listUsers: async () => (await client.get<UserList>('/iam/users')).data,
+  createUser: async (data: UserCreateInput) => (await client.post<AuthUser>('/iam/users', data)).data,
+  updateUser: async (id: number, data: UserUpdateInput) => (await client.patch<AuthUser>(`/iam/users/${id}`, data)).data,
+  resetPassword: async (id: number, password: string, must_change_password = true) => (await client.post<AuthUser>(`/iam/users/${id}/reset-password`, { password, must_change_password })).data,
+  listRoles: async () => (await client.get<Role[]>('/iam/roles')).data,
+  listPermissions: async () => (await client.get<Permission[]>('/iam/permissions')).data,
+  listAudit: async (limit = 40) => (await client.get<AuditEventList>('/iam/audit', { params: { limit } })).data,
+}
 
 interface ListParams {
   period?: Period
@@ -36,11 +77,11 @@ export const packagesApi = {
 
 export const settingsApi = {
   listColumns: async () => (await client.get<ColumnConfig[]>('/settings/columns')).data,
-  updateColumn: async (field: string, data: Pick<ColumnConfig, 'display_name'|'is_visible'|'column_width'|'input_type'|'options'|'option_colors'>) => (await client.put<ColumnConfig>(`/settings/columns/${field}`, data)).data,
+  updateColumn: async (field: string, data: Pick<ColumnConfig, 'display_name'|'is_visible'|'column_width'|'input_type'|'options'|'option_colors'> & Partial<Pick<ColumnConfig, 'share_options'|'project_options'|'project_option_colors'>>) => (await client.put<ColumnConfig>(`/settings/columns/${field}`, data)).data,
   updateColumnVisibility: async (field: string, register: 'workflow'|'transmittal', is_visible: boolean) => (await client.put<ColumnConfig>(`/settings/columns/${field}/visibility`, {is_visible}, {params:{register}})).data,
   resetColumns: async () => (await client.post<ColumnConfig[]>('/settings/columns/reset')).data,
   getWorkflow: async () => (await client.get<WorkflowConfig>('/settings/workflow')).data,
-  updateWorkflow: async (data: Pick<WorkflowConfig,'submission_steps'|'feedback_reviewers'|'feedback_status_labels'|'feedback_status_colors'|'transmittal_prefixes'>) => (await client.put<WorkflowConfig>('/settings/workflow', data)).data,
+  updateWorkflow: async (data: Pick<WorkflowConfig,'submission_steps'|'project_submission_steps'|'feedback_reviewers'|'feedback_status_labels'|'feedback_status_colors'|'transmittal_prefixes'>) => (await client.put<WorkflowConfig>('/settings/workflow', data)).data,
   getProjects: async () => (await client.get<ProjectConfig>('/settings/projects')).data,
   updateProjects: async (data: {projects: Array<{id?: number; code: string; name: string}>}) => (await client.put<ProjectConfig>('/settings/projects', data)).data,
 }

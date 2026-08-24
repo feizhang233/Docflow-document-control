@@ -24,6 +24,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-change-me-in-production}
+      AUTH_SECRET: ${AUTH_SECRET:-change-me-in-development-docflow-auth}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Administrator}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
     depends_on:
       db:
         condition: service_healthy

@@ -1,4 +1,4 @@
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 from app.models.notification import Notification
 
@@ -47,12 +47,22 @@ class NotificationService:
             title=f"Workflow feedback · {workflow_number or document_number}",
             package_id=package_id, workflow_number=workflow_number, document_number=document_number, message=message,
         )
-    def list(self, limit: int = 30, package_id: int | None = None, notification_type: str | None = None):
+    def list(self, limit: int = 30, package_id: int | None = None, notification_type: str | None = None, allowed_projects: list[str] | None = None):
+        from app.models.package import Package
         filters = []
         if package_id is not None: filters.append(Notification.package_id == package_id)
         if notification_type is not None: filters.append(Notification.notification_type == notification_type)
-        items_query = select(Notification).where(*filters).order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit)
-        unread_query = select(func.count()).select_from(Notification).where(Notification.is_read.is_(False), *filters)
+        items_query = select(Notification)
+        unread_query = select(func.count()).select_from(Notification)
+        if allowed_projects is not None:
+            project_filter = or_(Notification.package_id.is_(None), Package.project_code.in_(allowed_projects or ["__none__"]))
+            items_query = items_query.outerjoin(Package, Package.id == Notification.package_id).where(project_filter)
+            unread_query = unread_query.outerjoin(Package, Package.id == Notification.package_id).where(Notification.is_read.is_(False), project_filter, *filters)
+        else:
+            unread_query = unread_query.where(Notification.is_read.is_(False), *filters)
+        if filters:
+            items_query = items_query.where(*filters)
+        items_query = items_query.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit)
         items = list(self.db.scalars(items_query))
         unread = self.db.scalar(unread_query) or 0
         return items, unread

@@ -15,4 +15,7 @@ class ColumnConfig(Base):
     input_type: Mapped[str] = mapped_column(String(20), default="text", nullable=False)
     options: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     option_colors: Mapped[dict[str,str]] = mapped_column(JSON, default=dict, nullable=False)
+    share_options: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    project_options: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    project_option_colors: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

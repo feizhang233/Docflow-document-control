@@ -12,15 +12,28 @@ class PackageService:
     def __init__(self, db: Session): self.repo = PackageRepository(db)
     def create(self, data: PackageCreate):
         values = data.model_dump()
-        values["project_code"] = SettingsService(self.repo.db).require_project_code(values.get("project_code"))
+        settings = SettingsService(self.repo.db)
+        values["project_code"] = settings.require_project_code(values.get("project_code"))
         if not values["document_number"].strip():
             values["document_number"] = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
+        values["submission_progress"] = self._progress_for_project(values["project_code"], values.get("submission_progress"))
         return self.repo.create(values)
     def update(self, package_id: int, data: PackageUpdate):
         item = self.require(package_id)
         values = data.model_dump(exclude_unset=True)
+        settings = SettingsService(self.repo.db)
         if "project_code" in values:
-            values["project_code"] = SettingsService(self.repo.db).require_project_code(values.get("project_code"))
+            values["project_code"] = settings.require_project_code(values.get("project_code"))
+            if values["project_code"] != item.project_code and "submission_progress" not in values:
+                from app.services.settings_service import remap_submission_progress
+                values["submission_progress"] = remap_submission_progress(
+                    item.submission_progress,
+                    settings.submission_steps_for(item.project_code),
+                    settings.submission_steps_for(values["project_code"]),
+                )
+        target_project = values.get("project_code", item.project_code)
+        if "submission_progress" in values:
+            values["submission_progress"] = self._progress_for_project(target_project, values.get("submission_progress"))
         if values.get("document_number") is not None and not values["document_number"].strip():
             values["document_number"] = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
         previous_submission = dict(item.submission_progress)
@@ -53,6 +66,14 @@ class PackageService:
                 ),
             )
         return updated
+    def _progress_for_project(self, project_code: str, progress: dict | None):
+        from app.schemas.package import merge_submission_progress
+        from app.services.settings_service import remap_submission_progress
+        steps = SettingsService(self.repo.db).submission_steps_for(project_code)
+        current = merge_submission_progress(progress)
+        if all(step in current for step in steps):
+            return {step: bool(current.get(step, False)) for step in steps}
+        return remap_submission_progress(current, list(current.keys()), steps)
     def require(self, package_id: int):
         item = self.repo.get(package_id)
         if not item: raise HTTPException(status_code=404, detail="Package not found")

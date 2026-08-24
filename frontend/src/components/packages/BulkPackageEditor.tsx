@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Save, X } from 'lucide-react'
 import type { ColumnConfig, InputColumnField, Package, PackageInput, WorkflowConfig } from '../../types/package'
+import { columnOptionsFor, submissionStepsFor } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 
 type BulkField = Extract<InputColumnField, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents'> | 'notes'
@@ -31,7 +32,9 @@ interface Props {
 }
 
 export function BulkPackageEditor({ items, configs, workflowConfig, open, saving, onClose, onSave }: Props) {
-  const steps = workflowConfig.submission_steps
+  const stepSets = Array.from(new Set(items.map((item) => submissionStepsFor(workflowConfig, item.project_code).join('\u0001'))))
+  const sharedSteps = stepSets.length === 1 ? submissionStepsFor(workflowConfig, items[0]?.project_code) : null
+  const steps = sharedSteps || workflowConfig.submission_steps
   const [documentType, setDocumentType] = useState('')
   const [initiator, setInitiator] = useState('')
   const [discipline, setDiscipline] = useState('')
@@ -134,7 +137,9 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
           <div className="form-grid">
             {bulkFields.map((field) => {
               const config = configMap[field.name]
-              const options = config?.input_type === 'select' ? config.options : fallback[field.name]
+              const options = config?.input_type === 'select'
+                ? Array.from(new Set(items.flatMap((item) => columnOptionsFor(config, item.project_code, fallback[field.name] || []))))
+                : fallback[field.name]
               const value = fieldValue(field.name)
               const inputType = field.name === 'number_of_documents' ? 'number' : 'text'
               return (
@@ -163,12 +168,13 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
             <div className="editor-switch-row">
               <div>
                 <strong>Update submission progress</strong>
-                <span>Apply the same completed stage to every selected document.</span>
+                <span>{sharedSteps ? 'Apply the same completed stage to every selected document.' : 'Selected documents use different Submission Progress stages, so this cannot be bulk-updated.'}</span>
               </div>
               <label className="switch">
                 <input
                   type="checkbox"
                   checked={updateSubmissionProgress}
+                  disabled={!sharedSteps}
                   onChange={(e) => setUpdateSubmissionProgress(e.target.checked)}
                 />
                 <i />

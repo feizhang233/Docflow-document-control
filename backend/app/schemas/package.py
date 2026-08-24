@@ -62,8 +62,12 @@ class PackageBase(BaseModel):
     def validate_progress(cls, value: dict[str,bool]):
         if isinstance(value, dict):
             value = merge_submission_progress(value)
-        if len(value) != 4: raise ValueError("submission_progress must contain exactly four workflow steps")
-        return value
+        cleaned = {str(step): bool(done) for step, done in (value or {}).items() if str(step).strip()}
+        if not cleaned:
+            raise ValueError("submission_progress must contain at least one step")
+        if len(cleaned) > 12:
+            raise ValueError("submission_progress cannot contain more than 12 steps")
+        return cleaned
     @field_validator("feedback", mode="before")
     @classmethod
     def validate_feedback(cls, value: dict[str,bool]):
@@ -102,6 +106,19 @@ class PackageUpdate(BaseModel):
     has_attachment: bool | None = None
     is_abandoned: bool | None = None
     submission_progress: dict[str, bool] | None = None
+    @field_validator("submission_progress", mode="before")
+    @classmethod
+    def validate_optional_progress(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            value = merge_submission_progress(value)
+        cleaned = {str(step): bool(done) for step, done in value.items() if str(step).strip()}
+        if not cleaned:
+            raise ValueError("submission_progress must contain at least one step")
+        if len(cleaned) > 12:
+            raise ValueError("submission_progress cannot contain more than 12 steps")
+        return cleaned
     feedback: dict[str, bool] | None = None
     feedback_status: dict[str, str] | None = None
     order_index: int | None = Field(default=None, ge=0)

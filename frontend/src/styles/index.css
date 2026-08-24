@@ -290,3 +290,194 @@
 .project-config-row svg{width:15px}
 .project-config-add{width:max-content;margin-top:10px}
 @media(max-width:760px){.project-config-row{grid-template-columns:30px 1fr 36px;grid-template-areas:"index code remove" "index name name" ". count ."}.project-config-row b{grid-area:index}.project-config-row label:first-of-type{grid-area:code}.project-config-row label:last-of-type{grid-area:name}.project-config-row small{grid-area:count;padding-bottom:0}.project-config-row button{grid-area:remove}}
+.submission-scope{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #dbe3f3;border-radius:9px;background:#f6f8fd}
+.submission-scope>span{font-size:11px;font-weight:700;color:#2e405f;white-space:nowrap}
+.submission-scope select{flex:1;min-width:0;height:38px;border:1px solid #cad5e8;border-radius:8px;background:white;padding:0 10px;color:#253a60;font-size:12px;font-weight:600}
+.submission-custom-switch{margin-bottom:12px}
+.workflow-step-list.is-locked{opacity:.62}
+.workflow-step-row{grid-template-columns:24px minmax(0,1fr) 30px 30px 30px}
+.settings-panel .workflow-step-row{grid-template-columns:30px minmax(0,1fr) 38px 38px 38px}
+.submission-add-step{margin-top:10px}
+.pool-toggle{display:flex;background:#f0f2f5;border-radius:7px;padding:2px;width:max-content;margin-bottom:7px}
+.pool-toggle button{height:26px;border:0;border-radius:5px;background:transparent;padding:0 9px;color:#7c8798;font-size:8px}
+.pool-toggle button.active{background:white;color:#315fc7;box-shadow:0 1px 5px #1b2a4318;font-weight:600}
+.pool-toggle button:disabled{opacity:.45}
+.pool-project{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.pool-project>span{font-size:9px;color:#68758a;font-weight:700}
+.pool-project select{height:30px;border:1px solid #dce2eb;border-radius:6px;background:white;padding:0 8px;font-size:10px;color:#34435b}
+.settings-panel .pool-toggle button{height:30px;padding:0 11px;font-size:10px}
+.settings-panel .pool-project>span,.settings-panel .pool-project select{font-size:11px}
+.settings-panel .pool-project select{height:34px}
+.workflow-step-row button:last-child:hover:not(:disabled){background:#fff0f1;color:#b13f4c;border-color:#efc4c9}
+
+.login-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top left,#1b2d55,#111c35 52%)}
+.login-card{width:min(420px,100%);background:white;border-radius:16px;padding:32px 28px;box-shadow:0 24px 70px rgba(7,14,32,.28);display:flex;flex-direction:column;gap:14px}
+.login-brand{display:flex;align-items:center;gap:12px;color:#15233e}
+.login-brand .brand-mark{width:40px;height:40px;border-radius:11px;background:linear-gradient(145deg,#5583ff,#285ce2);color:white;display:grid;place-items:center;font:700 16px Manrope}
+.login-brand strong,.login-brand span{display:block}
+.login-brand strong{font:700 18px Manrope}
+.login-brand span{font-size:11px;color:#8290aa;letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+.login-card h1{margin:8px 0 0;font:700 26px Manrope;color:#15233e}
+.login-card p{margin:0;color:#718096;font-size:13px;line-height:1.5}
+.login-card label>span{display:block;font-size:11px;color:#5e6c81;font-weight:600;margin-bottom:6px}
+.login-card input{width:100%;height:42px;border:1px solid #dfe4eb;border-radius:8px;padding:0 12px;font-size:14px;color:#2f3e56}
+.login-card input:focus{border-color:#7e9cf0;box-shadow:0 0 0 3px #edf2ff;outline:0}
+.login-error{background:#fff1f2;color:#a92f3c;border-radius:8px;padding:10px 12px;font-size:12px}
+.login-card .primary-button{width:100%;height:44px;margin-top:4px}
+.auth-loading{min-height:100vh;display:grid;place-items:center;color:#718096;font-size:14px}
+.user-menu{position:relative}
+.user-chip-button{border:0;background:transparent;padding:0 14px 0 0;text-align:left}
+.user-menu-popover{position:absolute;right:0;top:46px;width:220px;background:white;border:1px solid #dfe4ec;border-radius:10px;box-shadow:0 16px 40px rgba(18,30,55,.16);padding:6px;z-index:80}
+.user-menu-identity{padding:10px 11px 8px;border-bottom:1px solid #edf0f4;margin-bottom:4px}
+.user-menu-identity strong,.user-menu-identity span{display:block}
+.user-menu-identity strong{font-size:12px;color:#243656}
+.user-menu-identity span{font-size:11px;color:#8490a3;margin-top:3px}
+.user-menu-popover button{width:100%;height:36px;border:0;background:white;border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;color:#48566d}
+.user-menu-popover button:hover{background:#f3f6fb;color:#2f5fc4}
+.user-menu-popover button.danger{color:#be3e4a}
+.user-menu-popover button.danger:hover{background:#fff1f2}
+.password-gate-card{width:min(520px,94vw)}
+.password-gate-copy{margin:0 0 16px;color:#66758b;font-size:13px;line-height:1.5}
+.iam-user-list{display:flex;flex-direction:column;gap:8px}
+.iam-user-card{display:grid;grid-template-columns:40px minmax(0,1.2fr) minmax(180px,.9fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #e4e8ef;border-radius:10px;background:#fbfcfe}
+.iam-user-card.inactive{opacity:.62}
+.iam-user-card strong,.iam-user-card span{display:block}
+.iam-user-card strong{font-size:13px;color:#243656}
+.iam-user-card span{font-size:11px;color:#7d899c;margin-top:3px}
+.iam-user-meta{display:flex;flex-direction:column;gap:4px}
+.iam-user-meta small{font-size:10px;color:#8490a3}
+.iam-user-actions{display:flex;gap:6px}
+.iam-audit{margin-top:22px}
+.iam-audit h3{margin:0 0 10px;font:700 13px Manrope;color:#2b3b55}
+.iam-audit ul{list-style:none;margin:0;padding:0;border:1px solid #e7ebf1;border-radius:10px;overflow:hidden}
+.iam-audit li{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:10px;padding:10px 12px;border-bottom:1px solid #eef1f4;font-size:11px}
+.iam-audit li:last-child{border-bottom:0}
+.iam-audit strong{color:#31415a}
+.iam-audit span,.iam-audit time{color:#7d899c}
+.iam-role-grid,.iam-project-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.iam-role-grid .check-card{align-items:flex-start;min-height:58px}
+.iam-role-grid .check-card span{display:flex;flex-direction:column;gap:3px}
+.iam-role-grid .check-card strong{font-size:12px;color:#31415a}
+.iam-role-grid .check-card small{font-size:10px;color:#7d899c;font-weight:400}
+.iam-editor footer{justify-content:flex-end}
+.settings-heading .primary-button{margin-left:auto}
+@media(max-width:800px){
+  .iam-user-card,.iam-audit li,.iam-role-grid,.iam-project-grid{grid-template-columns:1fr}
+  .iam-user-actions{justify-content:flex-start}
+}
+
+/* Settings remake: card editors, grouped backups, stacked workflow, quieter nav. */
+.settings-navigation-layout{grid-template-columns:232px minmax(0,1fr);gap:20px}
+.settings-nav{padding:10px 8px 8px;border-radius:14px}
+.settings-nav-label{margin:12px 10px 6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a95a7}
+.settings-nav-label:first-child{margin-top:2px}
+.settings-layout>.settings-nav button{height:auto;min-height:52px;padding:8px 10px;border-radius:10px;gap:11px}
+.settings-nav button>svg{width:16px;height:16px;padding:7px;box-sizing:content-box;border-radius:8px;background:#f3f6fb;color:#5d6d86}
+.settings-nav button.active{background:#f3f6ff;box-shadow:inset 0 0 0 1px #d5e0f8}
+.settings-nav button.active>svg{background:#edf2ff;color:#315fca}
+.settings-nav button strong{font-size:13px;color:#2d3d56}
+.settings-nav button small{font-size:11px;margin-top:2px;line-height:1.35}
+.settings-nav button:hover:not(.active){background:#f7f9fc}
+.settings-panel.wide{padding:22px 24px 24px;border-radius:14px}
+.settings-panel .settings-heading{padding-bottom:16px;margin-bottom:18px}
+.settings-panel .icon-heading>span{width:36px;height:36px;border-radius:10px}
+.settings-panel .settings-heading h2{font-size:20px}
+.settings-panel .settings-heading p{margin:6px 0 0;font-size:13px;line-height:1.45;color:#718096}
+
+.backup-groups{display:flex;flex-direction:column;gap:22px}
+.backup-group>h3{margin:0 0 10px;font:700 12px Manrope;color:#5a6a82;text-transform:uppercase;letter-spacing:.06em}
+.settings-panel .backup-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.settings-panel .backup-card{display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:16px;border-radius:12px;background:#fbfcfe}
+.backup-card-copy{display:flex;align-items:flex-start;gap:12px}
+.backup-card-copy>div{min-width:0}
+.settings-panel .backup-card h3{font-size:14px;color:#1f3050}
+.settings-panel .backup-card p{font-size:12px;line-height:1.45;margin:4px 0 0;color:#6e7b91}
+.settings-panel .backup-card small{display:block;margin-top:6px;font-size:11px;color:#93a0b2}
+.settings-panel .backup-card>.secondary-button{width:max-content}
+.import-review{grid-template-columns:minmax(0,1.2fr) minmax(240px,.9fr) auto;margin-top:18px;padding:14px 16px;border-radius:12px}
+
+.column-register-tabs{width:100%;max-width:520px;margin-bottom:16px}
+.column-register-tabs button{flex:1;height:38px;font-size:12px}
+.column-card-list{display:flex;flex-direction:column;gap:10px}
+.column-card{border:1px solid #e4e8ef;border-radius:12px;background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.column-card.is-dirty{border-color:#c5d4f4;box-shadow:0 0 0 3px #eef3ff}
+.column-card.is-hidden{background:#fafbfc}
+.column-card-head{display:flex;align-items:center;gap:12px}
+.column-card-head .config-name{flex:1;min-width:0}
+.column-card-head .config-name strong{font-size:14px;color:#1f3050}
+.column-card-head .config-name code{font-size:11px;color:#8a95a7}
+.column-dirty{font-style:normal;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#315fca;background:#edf2ff;border-radius:999px;padding:4px 8px}
+.column-card-head .config-visibility{margin-left:auto}
+.column-card .save-config{width:auto;height:34px;padding:0 12px;gap:6px;font-size:12px;font-weight:600}
+.column-card .save-config svg{width:14px}
+.column-card-fields{display:grid;grid-template-columns:minmax(0,1.4fr) 120px minmax(180px,.8fr);gap:12px;align-items:end}
+.column-card-fields>label>span,.column-card-type>span{display:block;font-size:11px;font-weight:600;color:#5e6c81;margin-bottom:6px}
+.column-card-type{display:flex;flex-direction:column;justify-content:flex-end}
+.column-card .config-text-input,.column-card .config-width{height:40px}
+.column-card .type-toggle{width:100%}
+.column-card .type-toggle button{flex:1;height:40px;font-size:12px}
+.column-card-options{padding-top:4px;border-top:1px dashed #e4e8ef;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.column-card .pool-toggle{margin:0}
+.column-card .pool-project{margin:0}
+.column-card .option-chips>span{font-size:11px;padding:6px 8px;border-radius:7px}
+.column-card .option-input{height:36px}
+.column-card .option-input input{width:180px;font-size:12px}
+.register-visibility-list{gap:10px}
+.register-visibility-row{min-height:64px;padding:12px 14px;border-radius:12px}
+.register-visibility-row.is-hidden{background:#fafbfc;opacity:.78}
+.register-visibility-row strong{font-size:13px}
+
+.workflow-config-editor{display:flex;flex-direction:column;gap:14px}
+.workflow-config-side{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.settings-panel .workflow-config-block{padding:16px;border-radius:12px;background:#fbfcfe}
+.settings-panel .workflow-config-title{margin-bottom:12px;align-items:flex-start}
+.workflow-config-title strong{font-size:14px}
+.workflow-config-title span{font-size:12px;line-height:1.4}
+.workflow-config-actions{position:sticky;bottom:0;z-index:2;margin-top:2px;border:1px solid #e4e8ef;box-shadow:0 -8px 20px rgba(26,42,74,.04)}
+.project-config-row{grid-template-columns:32px 150px minmax(200px,1fr) 110px 40px;padding:4px 0}
+.workflow-prefix-list{display:flex;flex-wrap:wrap;gap:8px}
+.workflow-prefix-list>div{height:36px;width:max-content;max-width:100%;padding:0 6px 0 12px;border-radius:8px}
+.workflow-prefix-list code{font-size:12px}
+.workflow-prefix-add{max-width:360px;height:40px;margin-top:10px}
+
+.iam-user-list{gap:10px}
+.iam-list-heading{margin-bottom:4px}
+.iam-user-card{grid-template-columns:42px minmax(0,1.3fr) minmax(140px,.8fr) minmax(140px,.7fr) auto;padding:14px 16px;border-radius:12px;background:#fff}
+.iam-user-card.inactive{opacity:1;background:#f7f8fa}
+.iam-user-card.inactive .iam-user-identity{opacity:.72}
+.iam-user-identity strong{display:flex;align-items:center;gap:8px;font-size:14px}
+.iam-user-identity em{font-style:normal;font-size:10px;font-weight:700;color:#315fca;background:#edf2ff;border-radius:999px;padding:2px 7px}
+.iam-user-identity span{font-size:12px}
+.iam-user-status{display:flex;flex-direction:column;gap:5px}
+.iam-status-pill{width:max-content;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:700;letter-spacing:.02em}
+.iam-status-pill.active{background:#e8f8f1;color:#21815d}
+.iam-status-pill.disabled{background:#f0f2f5;color:#68717e}
+.iam-user-status small,.iam-user-meta small{font-size:11px;color:#7d899c}
+.iam-audit{margin-top:24px}
+.iam-audit-empty{margin:0;padding:18px;color:#8a95a7;font-size:13px;text-align:center;border:1px dashed #dce2eb;border-radius:10px}
+.iam-audit ul{border-radius:12px}
+.iam-audit li{padding:12px 14px;font-size:12px}
+
+@media(max-width:1100px){
+  .column-card-fields{grid-template-columns:1fr 120px}
+  .column-card-type{grid-column:1/-1}
+  .workflow-config-side{grid-template-columns:1fr}
+  .iam-user-card{grid-template-columns:42px minmax(0,1fr) auto}
+  .iam-user-meta,.iam-user-status{grid-column:2}
+}
+@media(max-width:900px){
+  .settings-nav{display:flex;flex-wrap:wrap;gap:4px;padding:8px}
+  .settings-nav-label{width:100%;margin:8px 6px 2px}
+  .settings-layout>.settings-nav button{min-width:200px;flex:1}
+  .settings-panel .backup-grid{grid-template-columns:1fr}
+  .import-review{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .settings-panel.wide{padding:16px}
+  .column-card-head{flex-wrap:wrap}
+  .column-card-head .config-visibility{margin-left:0}
+  .column-card-fields{grid-template-columns:1fr}
+  .column-card .save-config{margin-left:auto}
+  .iam-user-card{grid-template-columns:42px minmax(0,1fr)}
+  .iam-user-actions{grid-column:1/-1}
+}

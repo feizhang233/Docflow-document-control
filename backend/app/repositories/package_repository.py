@@ -23,8 +23,12 @@ def period_bounds(period: str, today: date | None = None) -> tuple[date, date]:
 
 class PackageRepository:
     def __init__(self, db: Session): self.db = db
-    def list(self, *, period: str, project_code: str | None, search: str | None, discipline: str | None, document_type: str | None, transmittal_prefix: str | None, sort_by: str, sort_order: str, page: int, page_size: int):
+    def list(self, *, period: str, project_code: str | None, search: str | None, discipline: str | None, document_type: str | None, transmittal_prefix: str | None, sort_by: str, sort_order: str, page: int, page_size: int, allowed_projects: list[str] | None = None):
         query = select(Package)
+        if allowed_projects is not None:
+            if not allowed_projects:
+                return [], 0
+            query = query.where(Package.project_code.in_(allowed_projects))
         if project_code: query = query.where(Package.project_code == project_code)
         if period != "all":
             start, end = period_bounds(period)

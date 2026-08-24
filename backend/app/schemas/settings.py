@@ -10,9 +10,25 @@ CONFIGURABLE_FIELDS = {
     "document_number", "document_title", "document_date", "document_type", "initiator", "discipline",
     "number_of_documents", "transmittal_number", "workflow_number", "submission_progress", "feedback",
 }
+POOL_FIELDS = {"initiator", "discipline"}
+
+MIN_SUBMISSION_STEPS = 1
+MAX_SUBMISSION_STEPS = 12
+
+def _clean_step_names(value: list[str], *, merge_legacy: bool = True) -> list[str]:
+    names = merge_submission_steps(value) if merge_legacy and isinstance(value, list) else list(value)
+    cleaned = [str(item).strip() for item in names]
+    if any(not item for item in cleaned) or len(set(item.lower() for item in cleaned)) != len(cleaned):
+        raise ValueError("Workflow names must be non-empty and unique")
+    if any(len(item) > 80 for item in cleaned):
+        raise ValueError("Submission step names must be 80 characters or fewer")
+    if not (MIN_SUBMISSION_STEPS <= len(cleaned) <= MAX_SUBMISSION_STEPS):
+        raise ValueError(f"Submission Progress must have {MIN_SUBMISSION_STEPS}–{MAX_SUBMISSION_STEPS} stages")
+    return cleaned
 
 class WorkflowConfigUpdate(BaseModel):
-    submission_steps: list[str] = Field(min_length=4, max_length=4)
+    submission_steps: list[str] = Field(min_length=1, max_length=12)
+    project_submission_steps: dict[str, list[str]] = Field(default_factory=dict)
     feedback_reviewers: list[str] = Field(min_length=2, max_length=2)
     feedback_status_labels: dict[Literal["A","B","C","P"], str]
     feedback_status_colors: dict[Literal["A","B","C","P"], str] = Field(default_factory=lambda:{"A":"#21815d","B":"#9b6816","C":"#b13f4c","P":"#4267bd"})
@@ -25,11 +41,25 @@ class WorkflowConfigUpdate(BaseModel):
     @classmethod
     def merge_legacy_submission_steps(cls, value: list[str]):
         return merge_submission_steps(value) if isinstance(value, list) else value
-    @field_validator("submission_steps", "feedback_reviewers")
+    @field_validator("submission_steps")
+    @classmethod
+    def validate_submission_steps(cls, value: list[str]):
+        return _clean_step_names(value, merge_legacy=False)
+    @field_validator("feedback_reviewers")
     @classmethod
     def validate_unique_names(cls, value: list[str]):
         cleaned = [item.strip() for item in value]
         if any(not item for item in cleaned) or len(set(cleaned)) != len(cleaned): raise ValueError("Workflow names must be non-empty and unique")
+        return cleaned
+    @field_validator("project_submission_steps")
+    @classmethod
+    def validate_project_submission_steps(cls, value: dict[str, list[str]]):
+        cleaned: dict[str, list[str]] = {}
+        for code, steps in (value or {}).items():
+            key = str(code or "").strip().upper()
+            if not key or not isinstance(steps, list) or not steps:
+                continue
+            cleaned[key] = _clean_step_names(steps)
         return cleaned
     @field_validator("transmittal_prefixes")
     @classmethod
@@ -67,6 +97,9 @@ class ColumnConfigRead(BaseModel):
     input_type: Literal["text", "select"]
     options: list[str]
     option_colors: dict[str,str] = Field(default_factory=dict)
+    share_options: bool = True
+    project_options: dict[str, list[str]] = Field(default_factory=dict)
+    project_option_colors: dict[str, dict[str, str]] = Field(default_factory=dict)
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +110,9 @@ class ColumnConfigUpdate(BaseModel):
     input_type: Literal["text", "select"]
     options: list[str] = Field(default_factory=list, max_length=100)
     option_colors: dict[str,str] = Field(default_factory=dict)
+    share_options: bool | None = None
+    project_options: dict[str, list[str]] | None = None
+    project_option_colors: dict[str, dict[str, str]] | None = None
     @field_validator("column_width", mode="before")
     @classmethod
     def coerce_column_width(cls, value):
@@ -102,6 +138,34 @@ class ColumnConfigUpdate(BaseModel):
         if any(not _is_hex_color(color) for color in value.values()):
             raise ValueError("Option colors must use #RRGGBB format")
         return value
+    @field_validator("project_options")
+    @classmethod
+    def clean_project_options(cls, value: dict[str, list[str]] | None):
+        if value is None:
+            return None
+        cleaned: dict[str, list[str]] = {}
+        for code, options in value.items():
+            key = str(code or "").strip().upper()
+            if not key or not isinstance(options, list):
+                continue
+            names = list(dict.fromkeys(str(item).strip() for item in options if str(item).strip()))
+            if names:
+                cleaned[key] = names
+        return cleaned
+    @field_validator("project_option_colors")
+    @classmethod
+    def clean_project_option_colors(cls, value: dict[str, dict[str, str]] | None):
+        if value is None:
+            return None
+        cleaned: dict[str, dict[str, str]] = {}
+        for code, colors in value.items():
+            key = str(code or "").strip().upper()
+            if not key or not isinstance(colors, dict):
+                continue
+            palette = {str(option): color for option, color in colors.items() if _is_hex_color(str(color))}
+            if palette:
+                cleaned[key] = palette
+        return cleaned
 
 class ColumnVisibilityUpdate(BaseModel):
     is_visible: bool

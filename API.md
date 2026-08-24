@@ -4,15 +4,56 @@ All endpoints are served under `/api`. Interactive OpenAPI documentation is avai
 
 ## Authentication
 
-Internal UI endpoints currently rely on network access controls. The automation endpoint requires an API key in the `X-API-Key` header.
+Interactive UI endpoints require a signed-in DocFlow user. Login issues HttpOnly cookies (`docflow_access`, `docflow_refresh`). Send cookies with every browser request. API clients may instead send `Authorization: Bearer <access-token>`.
 
-Set a long random key in `.env` before deployment:
+External automation endpoints still use an API key in the `X-API-Key` header and do not use user sessions.
+
+Set secrets in `.env` before deployment:
 
 ```env
 EXTERNAL_API_KEY=replace_with_a_long_random_api_key
+AUTH_SECRET=replace_with_a_long_random_secret
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=replace_with_a_strong_password
+BOOTSTRAP_ADMIN_NAME=Administrator
 ```
 
+The first backend start creates the bootstrap administrator if the users table is empty. That account must change its password at first sign-in.
+
 Never commit a production key or place it in a query string.
+
+### Session
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Sign in with username/email and password; sets auth cookies |
+| `POST` | `/api/auth/refresh` | Rotate the refresh cookie and issue a new access cookie |
+| `POST` | `/api/auth/logout` | Revoke the current refresh token and clear cookies |
+| `GET` | `/api/auth/me` | Current user, roles, permissions, and project scope |
+| `POST` | `/api/auth/change-password` | Change the signed-in user's password |
+
+Login body: `{ "username": "admin", "password": "…" }`. Change-password body: `{ "current_password": "…", "new_password": "…" }` (minimum 10 characters).
+
+Responses: `200` authenticated payload, `401` invalid/expired session or credentials, `400` current password incorrect.
+
+### Identity and access
+
+Roles are system-defined: `admin`, `document_controller`, `editor`, `viewer`. Permissions are assigned through those roles. Users may be limited to selected `project_codes`, or granted `all_projects`.
+
+| Method | Endpoint | Permission | Description |
+| --- | --- | --- | --- |
+| `GET` | `/api/iam/users` | `iam:read` | List users |
+| `POST` | `/api/iam/users` | `iam:write` | Create a user |
+| `GET` | `/api/iam/users/{id}` | `iam:read` | Read one user |
+| `PATCH` | `/api/iam/users/{id}` | `iam:write` | Update name, email, roles, project scope, or active flag |
+| `POST` | `/api/iam/users/{id}/reset-password` | `iam:write` | Set a temporary password and revoke sessions |
+| `GET` | `/api/iam/roles` | `iam:read` | List roles and their permissions |
+| `GET` | `/api/iam/permissions` | `iam:read` | List permission catalog |
+| `GET` | `/api/iam/audit` | `iam:read` | Recent access events (`limit`, `offset`) |
+
+Create-user body includes `username`, `display_name`, `password`, `role_slugs`, optional `email`, `all_projects`, and `project_codes`. The last active administrator cannot be demoted or disabled.
+
+Internal document, settings, notification, and backup routes now require the matching permission. Missing authentication returns `401`; missing permission returns `403`. Project-scoped users receive `403` when they request another project.
 
 ## External workflow automation
 
@@ -233,7 +274,7 @@ Lifecycle fields accepted by create/update and included in metadata backups are 
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/settings/columns` | Read Document design and per-register visibility configuration |
-| `PUT` | `/api/settings/columns/{field}` | Update Document column labels, width, visibility, and input options |
+| `PUT` | `/api/settings/columns/{field}` | Update Document column labels, width, visibility, and input options. Initiator and Discipline also accept `share_options` and per-project `project_options` / `project_option_colors` |
 | `PUT` | `/api/settings/columns/{field}/visibility?register=workflow\|transmittal` | Update visibility only for the selected register |
 | `GET` | `/api/settings/workflow` | Read Submission stages, Feedback reviewers, A/B/C/P labels, and Transmittal filter prefixes |
 | `PUT` | `/api/settings/workflow` | Update workflow structure, Transmittal prefixes, and remap existing document state by position |
@@ -243,7 +284,7 @@ Lifecycle fields accepted by create/update and included in metadata backups are 
 | `POST` | `/api/metadata/import-csv?mode=merge` | Merge document rows parsed from a CSV file |
 | `POST` | `/api/metadata/import-csv?mode=replace` | Replace the document register with CSV rows |
 
-`PUT /api/settings/workflow` requires exactly four unique `submission_steps`, exactly two unique `feedback_reviewers`, labels for all four fixed status codes (`A`, `B`, `C`, `P`), and at least one `transmittal_prefixes` entry. Workflow configuration is included in metadata exports and restores. Legacy `Signature Process` and `Workflow Initiation` names are merged into `Workflow Prepare`.
+`PUT /api/settings/workflow` requires 1–12 unique `submission_steps`, exactly two unique `feedback_reviewers`, labels for all four fixed status codes (`A`, `B`, `C`, `P`), and at least one `transmittal_prefixes` entry. Optional `project_submission_steps` maps a project code to its own 1–12 stage names; omitted projects use the default `submission_steps`. Existing document progress is remapped by stage position when a list changes. Workflow configuration is included in metadata exports and restores. Legacy `Signature Process` and `Workflow Initiation` names are merged into `Workflow Prepare`.
 
 CSV imports accept a JSON body with `rows` after the browser parses a selected CSV file. The Settings screen supports the same headers emitted by CSV export: `document_number`, `document_date`, `document_type`, `initiator`, `discipline`, `number_of_documents`, `transmittal_number`, `workflow_number`, `workflow_terminated`, `has_attachment`, `is_abandoned`, and `notes`. In merge mode, a matching Document Number updates only columns present in the CSV; new rows receive the active Workflow defaults.
 

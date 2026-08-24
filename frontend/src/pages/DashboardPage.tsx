@@ -3,26 +3,26 @@ import { ArrowRight, CheckCircle2, Clock3, FileCheck2, Files, History, ListCheck
 import { Link, useSearchParams } from 'react-router-dom'
 import { notificationsApi, packagesApi, settingsApi } from '../lib/api'
 import { getEffectiveFeedbackStatus } from '../components/packages/FeedbackStatus'
-import { feedbackStatusLabels, feedbackSteps, submissionSteps, type FeedbackStatusCode, type Package, type ProjectFilter, type WorkflowNotification } from '../types/package'
+import { feedbackStatusLabels, feedbackSteps, type FeedbackStatusCode, type Package, type ProjectFilter, type WorkflowNotification } from '../types/package'
 import { useProjects } from '../hooks/useProjects'
-import { projectFilterFrom } from '../lib/projects'
+import { projectFilterFrom, submissionStepsFor } from '../lib/projects'
 
 const defaultColors:Record<FeedbackStatusCode,string>={A:'#21815d',B:'#9b6816',C:'#b13f4c',P:'#4267bd'}
 
 export function DashboardPage() {
   const [searchParams]=useSearchParams()
-  const {codes,labels}=useProjects()
-  const selectedProject=projectFilterFrom(searchParams.get('project'),codes)
+  const {codes,labels,canSeeAll}=useProjects()
+  const selectedProject=projectFilterFrom(searchParams.get('project'),codes,canSeeAll)
   const projectCode=selectedProject==='ALL'?undefined:selectedProject
   const {data}=useQuery({queryKey:['dashboard-packages',selectedProject],queryFn:()=>packagesApi.listAll({period:'all',project_code:projectCode})})
   const {data:workflowConfig}=useQuery({queryKey:['workflow-config'],queryFn:settingsApi.getWorkflow})
   const {data:notifications}=useQuery({queryKey:['notifications','dashboard'],queryFn:()=>notificationsApi.list(100),refetchInterval:30_000})
-  const currentSubmissionSteps=workflowConfig?.submission_steps||submissionSteps
+  const stepsFor=(item:Package)=>submissionStepsFor(workflowConfig,item.project_code)
   const currentFeedbackReviewers=workflowConfig?.feedback_reviewers||feedbackSteps
   const statusLabels=workflowConfig?.feedback_status_labels||feedbackStatusLabels
   const statusColors=workflowConfig?.feedback_status_colors||defaultColors
   const items=data?.items||[]
-  const complete=items.filter(item=>currentSubmissionSteps.every(step=>item.submission_progress[step])).length
+  const complete=items.filter(item=>stepsFor(item).every(step=>item.submission_progress[step])).length
   const feedbackPending=items.filter(item=>!item.feedback.Terminate&&currentFeedbackReviewers.some(step=>!item.feedback[step])).length
   const active=items.length-complete
   const [utiberReviewer='UTIBER',gdsReviewer='GDS']=currentFeedbackReviewers
@@ -39,7 +39,7 @@ export function DashboardPage() {
   ]
   let overviewOffset=0
   const overviewGradient=items.length?`conic-gradient(${overviewRows.map(row=>{const start=overviewOffset;overviewOffset+=row.count/items.length*100;return `${row.color} ${start}% ${overviewOffset}%`}).join(',')})`:'#e7ebf1'
-  const pending=items.filter(item=>!item.is_abandoned&&!item.workflow_terminated&&!item.feedback.Terminate&&!currentSubmissionSteps.every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,currentSubmissionSteps)-completedSteps(left,currentSubmissionSteps)).slice(0,8)
+  const pending=items.filter(item=>!item.is_abandoned&&!item.workflow_terminated&&!item.feedback.Terminate&&!stepsFor(item).every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,stepsFor(right))-completedSteps(left,stepsFor(left))).slice(0,8)
   const today=new Date()
   const packageForNotification=(notification:WorkflowNotification)=>items.find(item=>item.id===notification.package_id)||items.find(item=>item.workflow_number===notification.workflow_number&&item.document_number===notification.document_number)
   const todayChanges=(notifications?.items||[]).filter(item=>new Date(item.created_at).toDateString()===today.toDateString()&&(selectedProject==='ALL'||!!packageForNotification(item)))
@@ -68,7 +68,7 @@ export function DashboardPage() {
     </div>
 
     <div className="dashboard-row dashboard-row-primary">
-      <section className="panel dashboard-panel documents-complete-panel"><div className="panel-heading"><div><h2>Documents to complete</h2><p>Outstanding Submission Progress work</p></div><Link to={`/documents/all${registerSearch()}`}>View all <ArrowRight size={14}/></Link></div><div className="dashboard-list">{pending.map(item=>{const done=completedSteps(item,currentSubmissionSteps);const next=currentSubmissionSteps.find(step=>!item.submission_progress[step]);return <Link to={{pathname:'/documents/all',search:registerSearch(item.project_code,{package:String(item.id)})}} key={item.id}><div className="activity-icon"><Clock3/></div><div><strong>{item.document_number}</strong><span><b className={`dashboard-project project-${item.project_code.toLowerCase()}`}>{item.project_code}</b>{item.document_title||item.document_type} · Next: {next||'Complete'}</span><div className="mini-progress"><i style={{width:`${done/currentSubmissionSteps.length*100}%`}}/></div></div><div className="activity-meta"><strong>{done}/{currentSubmissionSteps.length}</strong><span>steps</span></div></Link>})}{!pending.length&&<div className="mini-empty"><CheckCircle2/>All documents have completed Submission Progress.</div>}</div></section>
+      <section className="panel dashboard-panel documents-complete-panel"><div className="panel-heading"><div><h2>Documents to complete</h2><p>Outstanding Submission Progress work</p></div><Link to={`/documents/all${registerSearch()}`}>View all <ArrowRight size={14}/></Link></div><div className="dashboard-list">{pending.map(item=>{const steps=stepsFor(item);const done=completedSteps(item,steps);const next=steps.find(step=>!item.submission_progress[step]);return <Link to={{pathname:'/documents/all',search:registerSearch(item.project_code,{package:String(item.id)})}} key={item.id}><div className="activity-icon"><Clock3/></div><div><strong>{item.document_number}</strong><span><b className={`dashboard-project project-${item.project_code.toLowerCase()}`}>{item.project_code}</b>{item.document_title||item.document_type} · Next: {next||'Complete'}</span><div className="mini-progress"><i style={{width:`${done/steps.length*100}%`}}/></div></div><div className="activity-meta"><strong>{done}/{steps.length}</strong><span>steps</span></div></Link>})}{!pending.length&&<div className="mini-empty"><CheckCircle2/>All documents have completed Submission Progress.</div>}</div></section>
       <div className="dashboard-change-column">
         <ChangePanel title="Progress Submission Change" subtitle="Submission updates received since midnight" items={submissionChanges} icon={<ListChecks/>} empty="No submission progress changes recorded today." detail={item=>item.message} destination={item=>notificationDestination(item,items)}/>
         <ChangePanel title="Workflow Update Change" subtitle="Feedback updates received since midnight" items={workflowChanges} icon={<MessageSquareText/>} empty="No workflow feedback changes recorded today." detail={workflowChangeDetail} destination={item=>notificationDestination(item,items)}/>

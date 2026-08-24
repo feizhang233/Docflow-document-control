@@ -158,11 +158,42 @@ def test_column_config_and_metadata_backup(client):
     assert discipline["is_visible_workflow"] is True and discipline["is_visible_transmittal"] is True
     document_type = next(item for item in reset.json() if item["field_name"] == "document_type")
     assert document_type["option_colors"]["Drawing"] == "#3164ce"
+    assert discipline["share_options"] is True
+    assert discipline["project_options"] == {}
     backup = client.get("/api/metadata/export")
     assert backup.status_code == 200 and backup.json()["packages"][0]["document_number"] == "DOC-CIV-001"
     assert backup.json()["packages"][0]["project_code"] == "NFS"
     result = client.post("/api/metadata/import?mode=replace", json=backup.json())
     assert result.status_code == 200 and result.json()["packages_created"] == 1
+
+def test_initiator_and_discipline_option_pools_can_be_per_project(client):
+    client.post("/api/settings/columns/reset")
+    shared = client.put("/api/settings/columns/initiator", json={
+        "input_type": "select",
+        "options": ["Ana", "Marko"],
+        "share_options": True,
+        "project_options": {},
+    })
+    assert shared.status_code == 200, shared.text
+    assert shared.json()["share_options"] is True
+    custom = client.put("/api/settings/columns/discipline", json={
+        "input_type": "select",
+        "options": ["Civil", "Structural"],
+        "share_options": False,
+        "project_options": {"FST": ["Fire", "MEP"], "NFS": ["Civil", "Structural", "Architectural"]},
+        "project_option_colors": {"FST": {"Fire": "#b13f4c"}},
+    })
+    assert custom.status_code == 200, custom.text
+    assert custom.json()["share_options"] is False
+    assert custom.json()["project_options"]["FST"] == ["Fire", "MEP"]
+    assert custom.json()["project_option_colors"]["FST"]["Fire"] == "#b13f4c"
+    unknown = client.put("/api/settings/columns/discipline", json={
+        "input_type": "select",
+        "options": ["Civil"],
+        "share_options": False,
+        "project_options": {"ZZZ": ["Nope"]},
+    })
+    assert unknown.status_code == 422
 
 def test_csv_import_appends_and_replaces_documents(client):
     original = client.post("/api/packages", json=payload()).json()
@@ -254,6 +285,43 @@ def test_workflow_configuration_reorders_and_remaps_existing_data(client):
     assert updated["feedback_status"]["Reviewer One"] == "A"
     duplicated = client.post(f"/api/packages/{created['id']}/duplicate").json()
     assert duplicated["feedback_status"] == {"Reviewer One":"P", "Reviewer Two":"P"}
+
+def test_submission_steps_can_change_count_and_override_per_project(client):
+    nfs = client.post("/api/packages", json=payload("NFS-SUB-001")).json()
+    fst = client.post("/api/packages", json=payload("FST-SUB-001") | {"project_code":"FST"}).json()
+    current = client.get("/api/settings/workflow").json()
+    assert current["project_submission_steps"] == {}
+    three = client.put("/api/settings/workflow", json={
+        **{key: current[key] for key in ("feedback_reviewers","feedback_status_labels","feedback_status_colors","transmittal_prefixes")},
+        "submission_steps": ["Prepare", "Review", "Issue"],
+        "project_submission_steps": {},
+    })
+    assert three.status_code == 200, three.text
+    assert three.json()["submission_steps"] == ["Prepare", "Review", "Issue"]
+    nfs_after = client.get(f"/api/packages/{nfs['id']}").json()
+    fst_after = client.get(f"/api/packages/{fst['id']}").json()
+    assert list(nfs_after["submission_progress"]) == ["Prepare", "Review", "Issue"]
+    assert list(fst_after["submission_progress"]) == ["Prepare", "Review", "Issue"]
+    assert nfs_after["submission_progress"]["Prepare"] is False
+    custom = client.put("/api/settings/workflow", json={
+        **{key: three.json()[key] for key in ("submission_steps","feedback_reviewers","feedback_status_labels","feedback_status_colors","transmittal_prefixes")},
+        "project_submission_steps": {"FST": ["Site check", "Issue pack"]},
+    })
+    assert custom.status_code == 200, custom.text
+    assert custom.json()["project_submission_steps"] == {"FST": ["Site check", "Issue pack"]}
+    nfs_kept = client.get(f"/api/packages/{nfs['id']}").json()
+    fst_custom = client.get(f"/api/packages/{fst['id']}").json()
+    assert list(nfs_kept["submission_progress"]) == ["Prepare", "Review", "Issue"]
+    assert list(fst_custom["submission_progress"]) == ["Site check", "Issue pack"]
+    created_fst = client.post("/api/packages", json=payload("FST-SUB-002") | {"project_code":"FST"}).json()
+    assert list(created_fst["submission_progress"]) == ["Site check", "Issue pack"]
+    created_nfs = client.post("/api/packages", json=payload("NFS-SUB-002")).json()
+    assert list(created_nfs["submission_progress"]) == ["Prepare", "Review", "Issue"]
+    unknown = client.put("/api/settings/workflow", json={
+        **{key: custom.json()[key] for key in ("submission_steps","feedback_reviewers","feedback_status_labels","feedback_status_colors","transmittal_prefixes")},
+        "project_submission_steps": {"ZZZ": ["Only"]},
+    })
+    assert unknown.status_code == 422
 
 def test_legacy_signature_and_initiation_merge_into_workflow_prepare(client):
     data = payload()

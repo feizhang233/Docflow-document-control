@@ -5,8 +5,9 @@
 ├── frontend/                 React + TypeScript single-page application
 │   ├── src/app/              Routes and application composition
 │   ├── src/components/       Layout, shared UI, package table/editor/drawer
-│   ├── src/lib/              API client and transport helpers
-│   ├── src/pages/            Dashboard, registers, and settings screens
+│   ├── src/lib/              API client, auth transport, and project helpers
+│   ├── src/hooks/            Auth session, projects, and UI behavior hooks
+│   ├── src/pages/            Dashboard, registers, settings, and login screens
 │   ├── src/styles/           Design system and responsive application CSS
 │   ├── src/types/            Shared frontend domain types
 │   ├── Dockerfile            Production frontend image
@@ -14,7 +15,7 @@
 ├── backend/                  FastAPI service
 │   ├── alembic/              Versioned MySQL schema migrations
 │   ├── app/api/              HTTP route layer
-│   ├── app/core/             Environment-based configuration
+│   ├── app/core/             Environment, JWT cookies, and permission catalog
 │   ├── app/db/               SQLAlchemy base and session lifecycle
 │   ├── app/models/           SQLAlchemy persistence models
 │   ├── app/repositories/     Database queries and persistence operations

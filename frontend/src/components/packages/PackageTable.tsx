@@ -15,6 +15,7 @@ interface Props {
   kind: PageKind
   configs: ColumnConfig[]
   submissionSteps: readonly string[]
+  submissionStepsFor?: (projectCode: string) => readonly string[]
   feedbackReviewers: readonly string[]
   feedbackStatusLabels: Record<FeedbackStatusCode, string>
   feedbackStatusColors: Record<FeedbackStatusCode, string>
@@ -29,11 +30,13 @@ interface Props {
   onView: (item: Package) => void
   onEdit: (item: Package) => void
   onReorder: (ids: number[]) => void
-  onAdvance: (item: Package, type: 'submission' | 'feedback') => void
+  onAdvance?: (item: Package, type: 'submission' | 'feedback') => void
   onDuplicate: (item: Package) => void
   onToggleAbandoned: (item: Package) => void
   onToggleTerminate: (item: Package) => void
   onDelete: (item: Package) => void
+  canWrite?: boolean
+  canDelete?: boolean
 }
 
 const styleFor = (config?: ColumnConfig): CSSProperties | undefined =>
@@ -94,12 +97,16 @@ function RowMenu({
   onToggleAbandoned,
   onToggleTerminate,
   onDelete,
+  canWrite = true,
+  canDelete = true,
 }: {
   item: Package
   onDuplicate: (item: Package) => void
   onToggleAbandoned: (item: Package) => void
   onToggleTerminate: (item: Package) => void
   onDelete: (item: Package) => void
+  canWrite?: boolean
+  canDelete?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null)
@@ -176,16 +183,16 @@ function RowMenu({
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <button onClick={() => { setMenuOpen(false); onDuplicate(item) }}><Copy />Duplicate document</button>
-          <button onClick={() => { setMenuOpen(false); onToggleAbandoned(item) }}>
+          {canWrite && <button onClick={() => { setMenuOpen(false); onDuplicate(item) }}><Copy />Duplicate document</button>}
+          {canWrite && <button onClick={() => { setMenuOpen(false); onToggleAbandoned(item) }}>
             {item.is_abandoned ? <RotateCcw /> : <Ban />}
             {item.is_abandoned ? 'Restore submission' : 'Abandon submission'}
-          </button>
-          <button onClick={() => { setMenuOpen(false); onToggleTerminate(item) }}>
+          </button>}
+          {canWrite && <button onClick={() => { setMenuOpen(false); onToggleTerminate(item) }}>
             {item.workflow_terminated ? <RotateCcw /> : <OctagonX />}
             {item.workflow_terminated ? 'Reopen workflow' : 'Terminate workflow'}
-          </button>
-          <button
+          </button>}
+          {canDelete && <button
             className="danger"
             onClick={() => {
               setMenuOpen(false)
@@ -193,7 +200,7 @@ function RowMenu({
             }}
           >
             <Trash2 />Delete document
-          </button>
+          </button>}
         </div>,
         document.body,
       )}
@@ -202,14 +209,15 @@ function RowMenu({
 }
 
 function SortableRow({
-  item, highlighted, kind, configs, submissionSteps, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
-  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete,
+  item, highlighted, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
+  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, canWrite = true, canDelete = true,
 }: {
   item: Package
   highlighted: boolean
   kind: PageKind
   configs: ColumnConfig[]
   submissionSteps: Props['submissionSteps']
+  submissionStepsFor?: Props['submissionStepsFor']
   feedbackReviewers: Props['feedbackReviewers']
   feedbackStatusLabels: Props['feedbackStatusLabels']
   feedbackStatusColors: Props['feedbackStatusColors']
@@ -223,8 +231,10 @@ function SortableRow({
   onToggleAbandoned: Props['onToggleAbandoned']
   onToggleTerminate: Props['onToggleTerminate']
   onDelete: Props['onDelete']
+  canWrite?: boolean
+  canDelete?: boolean
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canWrite })
   const style = { transform: CSS.Transform.toString(transform), transition }
   const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_number'
   const first = item[primaryField]
@@ -249,7 +259,7 @@ function SortableRow({
           </label>
         </td>
       ) : (
-        <td className="drag-cell"><button {...attributes} {...listeners} aria-label="Drag to reorder"><GripVertical size={16} /></button></td>
+        <td className="drag-cell">{canWrite ? <button {...attributes} {...listeners} aria-label="Drag to reorder"><GripVertical size={16} /></button> : null}</td>
       )}
       {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
       {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
@@ -261,21 +271,22 @@ function SortableRow({
       {shown('number_of_documents') && <td className="number-cell" style={styleFor(config('number_of_documents'))}>{item.number_of_documents}</td>}
       {primaryField !== 'transmittal_number' && shown('transmittal_number') && <td className="mono-cell" style={styleFor(config('transmittal_number'))}>{item.transmittal_number || '—'}</td>}
       {primaryField !== 'workflow_number' && shown('workflow_number') && <td className="mono-cell" style={styleFor(config('workflow_number'))}>{item.workflow_number || '—'}</td>}
-      {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={() => onAdvance(item, 'submission')} /></td>}
+      {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionStepsFor?.(item.project_code) || submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={canWrite && onAdvance ? () => onAdvance(item, 'submission') : undefined} /></td>}
       {shown('feedback') && <td className="progress-cell feedback" style={styleFor(config('feedback'))}><FeedbackStatus item={item} reviewers={feedbackReviewers} statusLabels={feedbackStatusLabels} statusColors={feedbackStatusColors} compact /></td>}
       <td className="action-cell">
         <button onClick={(event) => { event.stopPropagation(); onView(item) }} aria-label="View document"><Eye size={17} /></button>
-        <button onClick={(event) => { event.stopPropagation(); onEdit(item) }} aria-label="Edit document"><Pencil size={16} /></button>
-        <RowMenu item={item} onDuplicate={onDuplicate} onToggleAbandoned={onToggleAbandoned} onToggleTerminate={onToggleTerminate} onDelete={onDelete} />
+        {canWrite && <button onClick={(event) => { event.stopPropagation(); onEdit(item) }} aria-label="Edit document"><Pencil size={16} /></button>}
+        {(canWrite || canDelete) && <RowMenu item={item} onDuplicate={onDuplicate} onToggleAbandoned={onToggleAbandoned} onToggleTerminate={onToggleTerminate} onDelete={onDelete} canWrite={canWrite} canDelete={canDelete} />}
       </td>
     </tr>
   )
 }
 
 export function PackageTable({
-  items, highlightedPackageId, kind, configs, submissionSteps, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
+  items, highlightedPackageId, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
   sortBy, sortOrder, selectionMode = false, selectedIds, onToggleSelect, onToggleSelectAll,
   onSort, onColumnResize, onView, onEdit, onReorder, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete,
+  canWrite = true, canDelete = true,
 }: Props) {
   const [widths, setWidths] = useState<Record<string, number>>({})
   useEffect(() => setWidths(Object.fromEntries(configs.map((item) => [item.field_name, item.column_width]))), [configs])
@@ -359,7 +370,7 @@ export function PackageTable({
                   selectionMode={selectionMode}
                   selected={!!selectedIds?.has(item.id)}
                   onToggleSelect={onToggleSelect}
-                  {...{ item, kind, configs: layoutConfigs, submissionSteps, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete }}
+                  {...{ item, kind, configs: layoutConfigs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, canWrite, canDelete }}
                 />
               ))}
             </tbody>

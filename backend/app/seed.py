@@ -4,12 +4,15 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.package import Package
 from app.schemas.package import FEEDBACK_STEPS, SUBMISSION_STEPS
+from app.services.iam_service import IamService
 
 NAMES = ["Ana Petrović","Marko Jovanović","Luka Nikolić","Mila Stojanović","Ivan Marković","Sara Ilić","Nikola Popović","Jelena Savić"]
 DISCIPLINES = ["Civil","Structural","Electrical","Mechanical","Architectural","Geotechnical"]
 TYPES = ["Drawing","Technical Report","Method Statement","Specification","Calculation"]
 def flags(keys, count): return {key: i < count for i,key in enumerate(keys)}
 def seed():
+    with SessionLocal() as db:
+        IamService(db).bootstrap()
     if not settings.seed_demo_data: return
     with SessionLocal() as db:
         if (db.scalar(select(func.count()).select_from(Package)) or 0) > 0: return

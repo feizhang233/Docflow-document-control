@@ -7,6 +7,7 @@ class WorkflowConfig(Base):
     __tablename__ = "workflow_configs"
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     submission_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    project_submission_steps: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     feedback_reviewers: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     feedback_status_labels: Mapped[dict[str,str]] = mapped_column(JSON, nullable=False)
     feedback_status_colors: Mapped[dict[str,str]] = mapped_column(JSON, nullable=False)

@@ -64,9 +64,8 @@ def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Sess
     items = repo.list_by_workflow_number(workflow_number)
     if not items:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    config = SettingsService(db).get_workflow_config()
-    if data.submission_progress is not None and not set(data.submission_progress).issubset(config.submission_steps):
-        raise HTTPException(status_code=422, detail="Unknown submission progress step")
+    settings_service = SettingsService(db)
+    config = settings_service.get_workflow_config()
     allowed_feedback = set(config.feedback_reviewers) | {"Terminate"}
     if data.feedback is not None and not set(data.feedback).issubset(allowed_feedback):
         raise HTTPException(status_code=422, detail="Unknown feedback reviewer")
@@ -75,6 +74,8 @@ def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Sess
 
     updated_items = []
     for item in items:
+        if data.submission_progress is not None and not set(data.submission_progress).issubset(settings_service.submission_steps_for(item.project_code)):
+            raise HTTPException(status_code=422, detail="Unknown submission progress step")
         values = _values_for_package(item, data)
         if not values:
             continue

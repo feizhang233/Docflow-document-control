@@ -8,7 +8,7 @@ from app.models.package import Package
 from app.models.project_config import ProjectConfig
 from app.models.workflow_config import WorkflowConfig
 from app.schemas.package import DEFAULT_PROJECT_CODE, merge_submission_progress, merge_submission_steps
-from app.schemas.settings import CONFIGURABLE_FIELDS, ColumnConfigUpdate, CsvMetadataImport, MetadataImport, ProjectConfigUpdate, WorkflowConfigUpdate
+from app.schemas.settings import CONFIGURABLE_FIELDS, POOL_FIELDS, ColumnConfigUpdate, CsvMetadataImport, MetadataImport, ProjectConfigUpdate, WorkflowConfigUpdate
 
 DEFAULT_PROJECTS = [
     {"id": 1, "code": "NFS", "name": "NFS Main Project"},
@@ -18,11 +18,22 @@ DEFAULT_PROJECTS = [
 
 DEFAULT_WORKFLOW = {
     "submission_steps":["Transmittal Preparation","DCO Backup","Workflow Prepare","Email Feedback"],
+    "project_submission_steps": {},
     "feedback_reviewers":["UTIBER","GDS"],
     "feedback_status_labels":{"A":"Approved","B":"Approved with comments","C":"Rejected","P":"Pending"},
     "feedback_status_colors":{"A":"#21815d","B":"#9b6816","C":"#b13f4c","P":"#4267bd"},
     "transmittal_prefixes":["NFS-PCH-TRA-PZI-","NFS-PCH-TRA-RFI-","NFS-PCH-TRA-RPT-"],
 }
+
+def remap_submission_progress(progress: dict | None, old_steps: list[str], new_steps: list[str]) -> dict[str, bool]:
+    current = merge_submission_progress(progress)
+    mapped: dict[str, bool] = {}
+    for index, new in enumerate(new_steps):
+        if index < len(old_steps):
+            mapped[new] = bool(current.get(old_steps[index], False))
+        else:
+            mapped[new] = False
+    return mapped
 
 DEFAULT_COLUMN_CONFIGS = {
     "document_number": ("Document Number", 165, "text", [], {}),
@@ -54,6 +65,24 @@ class SettingsService:
         item.input_type = data.input_type
         item.options = data.options if data.input_type == "select" else []
         item.option_colors = {option:color for option,color in data.option_colors.items() if option in item.options}
+        if field_name in POOL_FIELDS:
+            allowed = set(self.project_codes())
+            if data.share_options is not None:
+                item.share_options = data.share_options
+            if data.project_options is not None:
+                unknown = [code for code in data.project_options if code not in allowed]
+                if unknown:
+                    raise HTTPException(status_code=422, detail=f"Unknown project code in option pool: {unknown[0]}")
+                item.project_options = {code: options for code, options in data.project_options.items() if code in allowed}
+            if data.project_option_colors is not None:
+                item.project_option_colors = {
+                    code: {option: color for option, color in colors.items() if option in (item.project_options or {}).get(code, [])}
+                    for code, colors in data.project_option_colors.items() if code in allowed
+                }
+        else:
+            item.share_options = True
+            item.project_options = {}
+            item.project_option_colors = {}
         self.db.commit(); self.db.refresh(item); return item
     def update_register_visibility(self, field_name: str, register: str, is_visible: bool):
         if field_name not in CONFIGURABLE_FIELDS or register not in {"workflow", "transmittal"}: return None
@@ -75,6 +104,9 @@ class SettingsService:
             item.input_type = input_type
             item.options = options
             item.option_colors = option_colors
+            item.share_options = True
+            item.project_options = {}
+            item.project_option_colors = {}
         self.db.commit()
         return self.list_configs()
     def get_project_config(self):
@@ -136,6 +168,28 @@ class SettingsService:
             if blocking:
                 raise HTTPException(status_code=400, detail=f"Cannot remove project(s) still used by documents: {', '.join(sorted(blocking))}")
         item.projects = incoming
+        workflow = self.db.get(WorkflowConfig, 1)
+        if workflow:
+            overrides = dict(workflow.project_submission_steps or {})
+            for old_code, new_code in remaps:
+                if old_code in overrides:
+                    overrides[new_code] = overrides.pop(old_code)
+            for code in leftover:
+                overrides.pop(code, None)
+            workflow.project_submission_steps = overrides
+        for column in self.db.scalars(select(ColumnConfig)):
+            options = dict(column.project_options or {})
+            colors = dict(column.project_option_colors or {})
+            for old_code, new_code in remaps:
+                if old_code in options:
+                    options[new_code] = options.pop(old_code)
+                if old_code in colors:
+                    colors[new_code] = colors.pop(old_code)
+            for code in leftover:
+                options.pop(code, None)
+                colors.pop(code, None)
+            column.project_options = options
+            column.project_option_colors = colors
         self.db.commit()
         self.db.refresh(item)
         return self.project_config_payload()
@@ -158,16 +212,36 @@ class SettingsService:
         item = self.db.get(WorkflowConfig, 1)
         if not item:
             item = WorkflowConfig(id=1, **DEFAULT_WORKFLOW); self.db.add(item); self.db.commit(); self.db.refresh(item)
+        if item.project_submission_steps is None:
+            item.project_submission_steps = {}
         return item
+    def submission_steps_for(self, project_code: str | None = None) -> list[str]:
+        config = self.get_workflow_config()
+        code = (project_code or "").strip().upper()
+        override = (config.project_submission_steps or {}).get(code) if code else None
+        if override:
+            return list(override)
+        return list(config.submission_steps)
     def update_workflow_config(self, data: WorkflowConfigUpdate):
         item = self.get_workflow_config()
-        old_steps, old_reviewers = merge_submission_steps(item.submission_steps), item.feedback_reviewers
+        old_default = merge_submission_steps(item.submission_steps)
+        old_overrides = {str(code).upper(): list(steps) for code, steps in (item.project_submission_steps or {}).items() if steps}
+        new_default = list(data.submission_steps)
+        new_overrides = {str(code).upper(): list(steps) for code, steps in (data.project_submission_steps or {}).items() if steps}
+        allowed_projects = set(self.project_codes())
+        unknown = [code for code in new_overrides if code not in allowed_projects]
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"Unknown project code in Submission Progress overrides: {unknown[0]}")
+        old_reviewers = item.feedback_reviewers
         for package in self.db.scalars(select(Package)):
-            progress = merge_submission_progress(package.submission_progress)
-            package.submission_progress = {new: bool(progress.get(old, False)) for old,new in zip(old_steps, data.submission_steps)}
+            old_steps = old_overrides.get(package.project_code) or old_default
+            new_steps = new_overrides.get(package.project_code) or new_default
+            if old_steps != new_steps:
+                package.submission_progress = remap_submission_progress(package.submission_progress, old_steps, new_steps)
             package.feedback = {new: bool(package.feedback.get(old, False)) for old,new in zip(old_reviewers, data.feedback_reviewers)} | {"Terminate": bool(package.feedback.get("Terminate", False))}
             package.feedback_status = {new: package.feedback_status.get(old, "P") for old,new in zip(old_reviewers, data.feedback_reviewers)}
-        item.submission_steps = data.submission_steps
+        item.submission_steps = new_default
+        item.project_submission_steps = new_overrides
         item.feedback_reviewers = data.feedback_reviewers
         item.feedback_status_labels = data.feedback_status_labels
         item.feedback_status_colors = data.feedback_status_colors
@@ -215,6 +289,9 @@ class SettingsService:
                 config.input_type = incoming.input_type
                 config.options = incoming.options if incoming.input_type == "select" else []
                 config.option_colors = {option:color for option,color in incoming.option_colors.items() if option in config.options}
+                config.share_options = incoming.share_options if incoming.field_name in POOL_FIELDS else True
+                config.project_options = incoming.project_options if incoming.field_name in POOL_FIELDS else {}
+                config.project_option_colors = incoming.project_option_colors if incoming.field_name in POOL_FIELDS else {}
                 configs_updated += 1
         self.db.commit()
         return {"mode":mode,"packages_created":created,"packages_updated":0,"configs_updated":configs_updated}
@@ -240,7 +317,7 @@ class SettingsService:
                 "project_code":default_project, "document_number": number, "document_title":"", "document_date": date.today(), "document_type":"", "initiator":"", "discipline":"",
                 "number_of_documents":1, "transmittal_number":None, "workflow_number":None, "workflow_terminated":False,
                 "notes":"", "has_attachment":False, "is_abandoned":False,
-                "submission_progress":{step:False for step in workflow.submission_steps},
+                "submission_progress":{step:False for step in self.submission_steps_for(values.get("project_code") or default_project)},
                 "feedback":{**{reviewer:False for reviewer in workflow.feedback_reviewers}, "Terminate":False},
                 "feedback_status":{reviewer:"P" for reviewer in workflow.feedback_reviewers}, "order_index":order_index,
             }

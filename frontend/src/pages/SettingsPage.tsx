@@ -1,20 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Building2, Check, Download, FileJson, FileSpreadsheet, ListFilter, LoaderCircle, Plus, RotateCcw, Save, Upload, Workflow, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, Check, Download, FileJson, FileSpreadsheet, ListFilter, LoaderCircle, Plus, RotateCcw, Save, Shield, Upload, Workflow, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { SyncedHorizontalScroll } from '../components/common/SyncedHorizontalScroll'
+import { AccessPanel } from '../components/iam/AccessPanel'
+import { useAuth } from '../hooks/useAuth'
 import { getApiError, metadataApi, packagesApi, settingsApi } from '../lib/api'
 import type { ColumnConfig, CsvImportRow, FeedbackStatusCode, MetadataBackup, ProjectConfig, WorkflowConfig } from '../types/package'
 import { useProjects } from '../hooks/useProjects'
 
 type ImportMode = 'merge'|'replace'
 type CsvImportPreview = { fileName:string; rows:CsvImportRow[] }
-type SettingsSection = 'columns'|'projects'|'workflow'|'backup'
+type SettingsSection = 'columns'|'projects'|'workflow'|'backup'|'access'
 type ColumnRegister = 'documents'|'workflow'|'transmittal'
 const palette=['#3164ce','#7453be','#21815d','#b06a1d','#b13f4c','#9b4d80','#3970c7','#68717e']
 
+const sectionHint:Record<SettingsSection,string> = {
+  columns:'Names, width, visibility, and dropdown pools.',
+  projects:'The list used by the sidebar switcher and document editor.',
+  workflow:'Submission stages, feedback labels, and transmittal filters.',
+  backup:'Export or restore document metadata as JSON or CSV.',
+  access:'Accounts, roles, and project scope.',
+}
+
 export function SettingsPage() {
   const queryClient=useQueryClient()
+  const {can}=useAuth()
+  const canSettings=can('settings:write')
+  const canExport=can('metadata:export')
+  const canImport=can('metadata:import')
+  const canIam=can('iam:read')
   const inputRef=useRef<HTMLInputElement>(null)
   const csvInputRef=useRef<HTMLInputElement>(null)
   const [backup,setBackup]=useState<MetadataBackup|null>(null)
@@ -22,7 +36,7 @@ export function SettingsPage() {
   const [fileName,setFileName]=useState('')
   const [mode,setMode]=useState<ImportMode>('merge')
   const [csvMode,setCsvMode]=useState<ImportMode>('merge')
-  const [section,setSection]=useState<SettingsSection>('columns')
+  const [section,setSection]=useState<SettingsSection>(()=>canSettings?'columns':canIam?'access':'backup')
   const [columnRegister,setColumnRegister]=useState<ColumnRegister>('documents')
   const configs=useQuery({queryKey:['column-configs'],queryFn:settingsApi.listColumns})
   const workflowConfig=useQuery({queryKey:['workflow-config'],queryFn:settingsApi.getWorkflow})
@@ -65,29 +79,159 @@ export function SettingsPage() {
     try{const rows=parseDocumentCsv(await file.text(),projectCodes);setCsvImport({fileName:file.name,rows});setCsvMode('merge')}
     catch(error){setCsvImport(null);toast.error(error instanceof Error?error.message:'This is not a valid document CSV')}
   }
-  return <><div className="page-header"><div><div className="breadcrumb">Document Control <span>/</span> Settings</div><h1>Settings</h1><p>Control data backups and how document metadata is entered.</p></div></div>
+  const visibleCount=configs.data?.filter(item=>columnRegister==='documents'?item.is_visible:columnRegister==='workflow'?item.is_visible_workflow:item.is_visible_transmittal).length||0
+  return <>
+    <div className="page-header">
+      <div>
+        <div className="breadcrumb">Document Control <span>/</span> Settings</div>
+        <h1>Settings</h1>
+        <p>{sectionHint[section]}</p>
+      </div>
+    </div>
     <div className="settings-layout settings-navigation-layout">
-      <nav className="settings-nav" aria-label="Settings sections"><button className={section==='columns'?'active':''} onClick={()=>setSection('columns')}><ListFilter/><span><strong>Columns & labels</strong><small>Width, names, colors</small></span></button><button className={section==='projects'?'active':''} onClick={()=>setSection('projects')}><Building2/><span><strong>Project setting</strong><small>Count and names</small></span></button><button className={section==='workflow'?'active':''} onClick={()=>setSection('workflow')}><Workflow/><span><strong>Workflow</strong><small>Stages, feedback, prefixes</small></span></button><button className={section==='backup'?'active':''} onClick={()=>setSection('backup')}><FileJson/><span><strong>Backup & restore</strong><small>JSON and CSV</small></span></button></nav>
+      <nav className="settings-nav" aria-label="Settings sections">
+        <p className="settings-nav-label">Workspace</p>
+        {canSettings&&<button type="button" className={section==='columns'?'active':''} onClick={()=>setSection('columns')}><ListFilter/><span><strong>Columns & labels</strong><small>Width, names, colors</small></span></button>}
+        {canSettings&&<button type="button" className={section==='projects'?'active':''} onClick={()=>setSection('projects')}><Building2/><span><strong>Project setting</strong><small>Count and names</small></span></button>}
+        {canSettings&&<button type="button" className={section==='workflow'?'active':''} onClick={()=>setSection('workflow')}><Workflow/><span><strong>Workflow</strong><small>Stages, feedback, prefixes</small></span></button>}
+        {(canExport||canImport||canIam)&&<p className="settings-nav-label">System</p>}
+        {(canExport||canImport)&&<button type="button" className={section==='backup'?'active':''} onClick={()=>setSection('backup')}><FileJson/><span><strong>Backup & restore</strong><small>JSON and CSV</small></span></button>}
+        {canIam&&<button type="button" className={section==='access'?'active':''} onClick={()=>setSection('access')}><Shield/><span><strong>Users & access</strong><small>Accounts, roles, projects</small></span></button>}
+      </nav>
       <div className="settings-view">
-      {section==='backup'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><FileJson/></span><div><h2>Metadata backup & restore</h2><p>Export all document metadata and field settings, or restore them from a DocFlow JSON backup.</p></div></div>
-        <div className="backup-grid">
-          <div className="backup-card"><div className="backup-icon blue"><Download/></div><div><h3>Export metadata</h3><p>Download a dated JSON snapshot containing all packages, progress, feedback and column settings.</p><small>Recommended before bulk changes</small></div><button className="secondary-button" disabled={exportMutation.isPending} onClick={()=>exportMutation.mutate()}>{exportMutation.isPending?<LoaderCircle className="spin"/>:<Download/>} Export backup</button></div>
-          <div className="backup-card"><div className="backup-icon green"><FileSpreadsheet/></div><div><h3>Export document CSV</h3><p>Download document metadata for reporting and review outside DocFlow.</p><small>Includes lifecycle and attachment fields</small></div><button className="secondary-button" disabled={csvMutation.isPending} onClick={()=>csvMutation.mutate()}>{csvMutation.isPending?<LoaderCircle className="spin"/>:<Download/>} Export CSV</button></div>
-          <div className="backup-card"><div className="backup-icon purple"><Upload/></div><div><h3>Import metadata</h3><p>Merge into current data or replace the complete register from a DocFlow JSON backup.</p><small>Restores documents and settings</small></div><input ref={inputRef} hidden type="file" accept="application/json,.json" onChange={e=>chooseFile(e.target.files?.[0])}/><button className="secondary-button" onClick={()=>inputRef.current?.click()}><Upload/> Choose JSON</button></div>
-          <div className="backup-card"><div className="backup-icon green"><FileSpreadsheet/></div><div><h3>Import document CSV</h3><p>Import exported CSV data, or a spreadsheet prepared with the same column headers.</p><small>Supports merge and replace modes</small></div><input ref={csvInputRef} hidden type="file" accept="text/csv,.csv" onChange={e=>chooseCsv(e.target.files?.[0])}/><button className="secondary-button" onClick={()=>csvInputRef.current?.click()}><Upload/> Choose CSV</button></div>
+      {section==='backup'&&<section className="settings-panel wide">
+        <div className="settings-heading icon-heading">
+          <span><FileJson/></span>
+          <div>
+            <h2>Backup & restore</h2>
+            <p>Export a snapshot before bulk changes, or restore documents from a DocFlow JSON backup or CSV file.</p>
+          </div>
         </div>
-        {backup&&<div className="import-review"><div className="file-summary"><FileJson/><div><strong>{fileName}</strong><span>{backup.packages.length} documents · {backup.column_configs.length} field settings</span></div><button onClick={()=>{setBackup(null);setFileName('')}}><X/></button></div><label><span>Import behaviour</span><select value={mode} onChange={e=>setMode(e.target.value as 'merge'|'replace')}><option value="merge">Merge — append all records (same document number allowed for revisions)</option><option value="replace">Replace — delete current records, then restore this backup</option></select></label><button className="primary-button" disabled={importMutation.isPending} onClick={()=>importMutation.mutate()}>{importMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm import</button></div>}
-        {csvImport&&<div className="import-review csv-import-review"><div className="file-summary"><FileSpreadsheet/><div><strong>{csvImport.fileName}</strong><span>{csvImport.rows.length} document rows · CSV data import</span></div><button onClick={()=>setCsvImport(null)}><X/></button></div><label><span>Import behaviour</span><select value={csvMode} onChange={e=>setCsvMode(e.target.value as ImportMode)}><option value="merge">Merge — append every row as a new record (revisions may share a document number)</option><option value="replace">Replace — delete current records, then import this CSV</option></select></label><button className="primary-button" disabled={csvImportMutation.isPending} onClick={()=>csvImportMutation.mutate()}>{csvImportMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm CSV import</button></div>}
+        <div className="backup-groups">
+          {canExport&&<div className="backup-group">
+            <h3>Export</h3>
+            <div className="backup-grid">
+              <div className="backup-card">
+                <div className="backup-card-copy">
+                  <div className="backup-icon blue"><Download/></div>
+                  <div>
+                    <h3>Export metadata</h3>
+                    <p>Download a dated JSON snapshot of all packages, progress, feedback and column settings.</p>
+                    <small>Recommended before bulk changes</small>
+                  </div>
+                </div>
+                <button className="secondary-button" disabled={exportMutation.isPending} onClick={()=>exportMutation.mutate()}>{exportMutation.isPending?<LoaderCircle className="spin"/>:<Download/>} Export backup</button>
+              </div>
+              <div className="backup-card">
+                <div className="backup-card-copy">
+                  <div className="backup-icon green"><FileSpreadsheet/></div>
+                  <div>
+                    <h3>Export document CSV</h3>
+                    <p>Download document metadata for reporting and review outside DocFlow.</p>
+                    <small>Includes lifecycle and attachment fields</small>
+                  </div>
+                </div>
+                <button className="secondary-button" disabled={csvMutation.isPending} onClick={()=>csvMutation.mutate()}>{csvMutation.isPending?<LoaderCircle className="spin"/>:<Download/>} Export CSV</button>
+              </div>
+            </div>
+          </div>}
+          {canImport&&<div className="backup-group">
+            <h3>Import</h3>
+            <div className="backup-grid">
+              <div className="backup-card">
+                <div className="backup-card-copy">
+                  <div className="backup-icon purple"><Upload/></div>
+                  <div>
+                    <h3>Import metadata</h3>
+                    <p>Merge into current data or replace the complete register from a DocFlow JSON backup.</p>
+                    <small>Restores documents and settings</small>
+                  </div>
+                </div>
+                <input ref={inputRef} hidden type="file" accept="application/json,.json" onChange={e=>chooseFile(e.target.files?.[0])}/>
+                <button className="secondary-button" onClick={()=>inputRef.current?.click()}><Upload/> Choose JSON</button>
+              </div>
+              <div className="backup-card">
+                <div className="backup-card-copy">
+                  <div className="backup-icon green"><FileSpreadsheet/></div>
+                  <div>
+                    <h3>Import document CSV</h3>
+                    <p>Import exported CSV data, or a spreadsheet prepared with the same column headers.</p>
+                    <small>Supports merge and replace modes</small>
+                  </div>
+                </div>
+                <input ref={csvInputRef} hidden type="file" accept="text/csv,.csv" onChange={e=>chooseCsv(e.target.files?.[0])}/>
+                <button className="secondary-button" onClick={()=>csvInputRef.current?.click()}><Upload/> Choose CSV</button>
+              </div>
+            </div>
+          </div>}
+        </div>
+        {backup&&<div className="import-review">
+          <div className="file-summary"><FileJson/><div><strong>{fileName}</strong><span>{backup.packages.length} documents · {backup.column_configs.length} field settings</span></div><button type="button" onClick={()=>{setBackup(null);setFileName('')}}><X/></button></div>
+          <label><span>Import behaviour</span><select value={mode} onChange={e=>setMode(e.target.value as 'merge'|'replace')}><option value="merge">Merge — append all records (same document number allowed for revisions)</option><option value="replace">Replace — delete current records, then restore this backup</option></select></label>
+          <button className="primary-button" disabled={importMutation.isPending} onClick={()=>importMutation.mutate()}>{importMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm import</button>
+        </div>}
+        {csvImport&&<div className="import-review csv-import-review">
+          <div className="file-summary"><FileSpreadsheet/><div><strong>{csvImport.fileName}</strong><span>{csvImport.rows.length} document rows · CSV data import</span></div><button type="button" onClick={()=>setCsvImport(null)}><X/></button></div>
+          <label><span>Import behaviour</span><select value={csvMode} onChange={e=>setCsvMode(e.target.value as ImportMode)}><option value="merge">Merge — append every row as a new record (revisions may share a document number)</option><option value="replace">Replace — delete current records, then import this CSV</option></select></label>
+          <button className="primary-button" disabled={csvImportMutation.isPending} onClick={()=>csvImportMutation.mutate()}>{csvImportMutation.isPending?<LoaderCircle className="spin"/>:<Check/>} Confirm CSV import</button>
+        </div>}
       </section>}
-      {section==='projects'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><Building2/></span><div><h2>Project setting</h2><p>Add, rename, or remove projects. The sidebar switcher and document editor use this list.</p></div></div>
+      {section==='projects'&&<section className="settings-panel wide">
+        <div className="settings-heading icon-heading">
+          <span><Building2/></span>
+          <div>
+            <h2>Project setting</h2>
+            <p>Add, rename, or remove projects. The sidebar switcher and document editor use this list.</p>
+          </div>
+        </div>
         {projectConfig.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading project settings…</div>:projectConfig.data?<ProjectConfigEditor config={projectConfig.data} onSaved={()=>{queryClient.invalidateQueries({queryKey:['project-config']});queryClient.invalidateQueries({queryKey:['packages']});queryClient.invalidateQueries({queryKey:['dashboard-packages']})}}/>:<div className="config-note"><strong>Project settings unavailable</strong><span>{projectConfig.error?getApiError(projectConfig.error):'Please refresh and try again.'}</span></div>}
       </section>}
-      {section==='workflow'&&<section className="settings-panel wide"><div className="settings-heading icon-heading"><span><Workflow/></span><div><h2>Workflow & transmittal</h2><p>Edit Submission stages, Feedback behavior, and the quick-filter prefixes used by the Transmittal register.</p></div></div>
+      {section==='workflow'&&<section className="settings-panel wide">
+        <div className="settings-heading icon-heading">
+          <span><Workflow/></span>
+          <div>
+            <h2>Workflow & transmittal</h2>
+            <p>Set default Submission Progress stages, optionally override them per project, and edit Feedback and Transmittal filters.</p>
+          </div>
+        </div>
         {workflowConfig.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading workflow settings…</div>:workflowConfig.data?<WorkflowConfigEditor config={workflowConfig.data} onSaved={()=>{queryClient.invalidateQueries({queryKey:['workflow-config']});queryClient.invalidateQueries({queryKey:['packages']});queryClient.invalidateQueries({queryKey:['dashboard-packages']})}}/>:<div className="config-note"><strong>Workflow settings unavailable</strong><span>{workflowConfig.error?getApiError(workflowConfig.error):'Please refresh and try again.'}</span></div>}
       </section>}
-      {section==='columns'&&<section className="settings-panel wide"><div className="settings-heading icon-heading column-settings-heading"><span><ListFilter/></span><div><h2>Column settings</h2><p>{columnRegister==='documents'?'Edit Document column names, visibility, width and metadata options.':'Choose which columns are visible on this register. Names, labels and field types are read-only here.'}</p></div><div className="column-settings-actions"><small>{configs.data?.filter(item=>columnRegister==='documents'?item.is_visible:columnRegister==='workflow'?item.is_visible_workflow:item.is_visible_transmittal).length||0} of {configs.data?.length||0} visible</small><button className="secondary-button" disabled={resetColumns.isPending} onClick={()=>{if(window.confirm('Reset all column names, widths, visibility, colors and input settings?'))resetColumns.mutate()}}>{resetColumns.isPending?<LoaderCircle className="spin"/>:<RotateCcw/>} Reset</button></div></div>
-        <div className="column-register-tabs" role="tablist" aria-label="Register column settings"><button role="tab" aria-selected={columnRegister==='documents'} className={columnRegister==='documents'?'active':''} onClick={()=>setColumnRegister('documents')}>Document</button><button role="tab" aria-selected={columnRegister==='workflow'} className={columnRegister==='workflow'?'active':''} onClick={()=>setColumnRegister('workflow')}>Workflow Page</button><button role="tab" aria-selected={columnRegister==='transmittal'} className={columnRegister==='transmittal'?'active':''} onClick={()=>setColumnRegister('transmittal')}>Transmittal Page</button></div>
-        {columnRegister==='documents'?<><SyncedHorizontalScroll className="config-table-scroll" contentClassName="config-table-scroll-body" deps={[configs.data?.length, configs.isLoading]} aria-label="Column settings table"><div className="config-table-block"><div className="config-table-head"><span>Column</span><span>Display name</span><span>Visible</span><span>Width</span><span>Input type</span><span>Dropdown options</span><span/></div><div className="config-list">{configs.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading field settings…</div>:configs.data?.map(config=><ColumnConfigRow key={config.field_name} config={config} onSaved={()=>queryClient.invalidateQueries({queryKey:['column-configs']})}/>)}</div></div></SyncedHorizontalScroll><div className="config-note"><strong>Document column design</strong><span>Width accepts 72–500 pixels. Hiding a column does not delete its data. Input type only affects editable metadata fields; progress columns remain read-only.</span></div></>:<><div className="register-visibility-list">{configs.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading field settings…</div>:configs.data?.map(config=>{const visible=columnRegister==='workflow'?config.is_visible_workflow:config.is_visible_transmittal;return <label key={config.field_name} className="register-visibility-row"><div><strong>{config.display_name}</strong><code>{config.field_name}</code></div><span>{visible?'Shown':'Hidden'}</span><span className="config-visibility"><input type="checkbox" checked={visible} disabled={updateRegisterVisibility.isPending} onChange={event=>updateRegisterVisibility.mutate({field:config.field_name,register:columnRegister,isVisible:event.target.checked})}/><i/></span></label>})}</div><div className="config-note"><strong>{columnRegister==='workflow'?'Workflow Page':'Transmittal Page'} visibility</strong><span>The available columns match Document. These settings only control whether each column is shown; names and labels remain managed by Document settings.</span></div></>}
+      {section==='access'&&<AccessPanel/>}
+      {section==='columns'&&canSettings&&<section className="settings-panel wide">
+        <div className="settings-heading icon-heading column-settings-heading">
+          <span><ListFilter/></span>
+          <div>
+            <h2>Column settings</h2>
+            <p>{columnRegister==='documents'?'Edit Document column names, visibility, width and metadata options.':'Choose which columns are visible on this register. Names, labels and field types are read-only here.'}</p>
+          </div>
+          <div className="column-settings-actions">
+            <small>{visibleCount} of {configs.data?.length||0} visible</small>
+            <button className="secondary-button" disabled={resetColumns.isPending} onClick={()=>{if(window.confirm('Reset all column names, widths, visibility, colors and input settings?'))resetColumns.mutate()}}>{resetColumns.isPending?<LoaderCircle className="spin"/>:<RotateCcw/>} Reset</button>
+          </div>
+        </div>
+        <div className="column-register-tabs" role="tablist" aria-label="Register column settings">
+          <button type="button" role="tab" aria-selected={columnRegister==='documents'} className={columnRegister==='documents'?'active':''} onClick={()=>setColumnRegister('documents')}>Document</button>
+          <button type="button" role="tab" aria-selected={columnRegister==='workflow'} className={columnRegister==='workflow'?'active':''} onClick={()=>setColumnRegister('workflow')}>Workflow Page</button>
+          <button type="button" role="tab" aria-selected={columnRegister==='transmittal'} className={columnRegister==='transmittal'?'active':''} onClick={()=>setColumnRegister('transmittal')}>Transmittal Page</button>
+        </div>
+        {columnRegister==='documents'?<>
+          <div className="column-card-list">
+            {configs.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading field settings…</div>:configs.data?.map(config=><ColumnConfigRow key={config.field_name} config={config} onSaved={()=>queryClient.invalidateQueries({queryKey:['column-configs']})}/>)}
+          </div>
+          <div className="config-note"><strong>Document column design</strong><span>Width accepts 72–500 pixels. Hiding a column does not delete its data. Input type only affects editable metadata fields; progress columns remain read-only.</span></div>
+        </>:<>
+          <div className="register-visibility-list">
+            {configs.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading field settings…</div>:configs.data?.map(config=>{
+              const visible=columnRegister==='workflow'?config.is_visible_workflow:config.is_visible_transmittal
+              return <label key={config.field_name} className={`register-visibility-row ${visible?'':'is-hidden'}`}>
+                <div><strong>{config.display_name}</strong><code>{config.field_name}</code></div>
+                <span>{visible?'Shown':'Hidden'}</span>
+                <span className="config-visibility"><input type="checkbox" checked={visible} disabled={updateRegisterVisibility.isPending} onChange={event=>updateRegisterVisibility.mutate({field:config.field_name,register:columnRegister,isVisible:event.target.checked})}/><i/></span>
+              </label>
+            })}
+          </div>
+          <div className="config-note"><strong>{columnRegister==='workflow'?'Workflow Page':'Transmittal Page'} visibility</strong><span>The available columns match Document. These settings only control whether each column is shown; names and labels remain managed by Document settings.</span></div>
+        </>}
       </section>}
       </div>
     </div>
@@ -202,38 +346,128 @@ function ProjectConfigEditor({config,onSaved}:{config:ProjectConfig;onSaved:()=>
 }
 
 function WorkflowConfigEditor({config,onSaved}:{config:WorkflowConfig;onSaved:()=>void}){
+  const {codes,labels:projectLabels}=useProjects()
   const [steps,setSteps]=useState([...config.submission_steps])
+  const [projectSteps,setProjectSteps]=useState<Record<string,string[]>>({...(config.project_submission_steps||{})})
+  const [scope,setScope]=useState('ALL')
   const [reviewers,setReviewers]=useState([...config.feedback_reviewers])
   const [labels,setLabels]=useState({...config.feedback_status_labels})
   const [colors,setColors]=useState({...config.feedback_status_colors})
   const [prefixes,setPrefixes]=useState([...config.transmittal_prefixes])
   const [prefixDraft,setPrefixDraft]=useState('')
-  useEffect(()=>{setSteps([...config.submission_steps]);setReviewers([...config.feedback_reviewers]);setLabels({...config.feedback_status_labels});setColors({...config.feedback_status_colors});setPrefixes([...config.transmittal_prefixes]);setPrefixDraft('')},[config])
-  const move=(index:number,direction:-1|1)=>setSteps(previous=>{const next=[...previous];const target=index+direction;if(target<0||target>=next.length)return previous;[next[index],next[target]]=[next[target],next[index]];return next})
-  const save=useMutation({mutationFn:()=>settingsApi.updateWorkflow({submission_steps:steps,feedback_reviewers:reviewers,feedback_status_labels:labels,feedback_status_colors:colors,transmittal_prefixes:prefixes}),onSuccess:()=>{toast.success('Workflow and transmittal settings updated');onSaved()},onError:e=>toast.error(getApiError(e))})
-  const invalid=[...steps,...reviewers,...Object.values(labels),...prefixes].some(value=>!value.trim())||!prefixes.length||new Set(steps.map(value=>value.trim().toLowerCase())).size!==steps.length||new Set(reviewers.map(value=>value.trim().toLowerCase())).size!==reviewers.length
+  useEffect(()=>{setSteps([...config.submission_steps]);setProjectSteps({...(config.project_submission_steps||{})});setReviewers([...config.feedback_reviewers]);setLabels({...config.feedback_status_labels});setColors({...config.feedback_status_colors});setPrefixes([...config.transmittal_prefixes]);setPrefixDraft('')},[config])
+  const custom=scope!=='ALL' && Array.isArray(projectSteps[scope])
+  const activeSteps=(custom?projectSteps[scope]:steps)||steps
+  const setActiveSteps=(updater:(current:string[])=>string[])=>{
+    if(scope==='ALL')setSteps(updater)
+    else setProjectSteps(previous=>({...previous,[scope]:updater(previous[scope]||[...steps])}))
+  }
+  const move=(index:number,direction:-1|1)=>setActiveSteps(previous=>{const next=[...previous];const target=index+direction;if(target<0||target>=next.length)return previous;[next[index],next[target]]=[next[target],next[index]];return next})
+  const addStep=()=>setActiveSteps(previous=>previous.length>=12?previous:[...previous,`Stage ${previous.length+1}`])
+  const removeStep=(index:number)=>setActiveSteps(previous=>previous.length<=1?previous:previous.filter((_,i)=>i!==index))
+  const save=useMutation({mutationFn:()=>settingsApi.updateWorkflow({submission_steps:steps,project_submission_steps:projectSteps,feedback_reviewers:reviewers,feedback_status_labels:labels,feedback_status_colors:colors,transmittal_prefixes:prefixes}),onSuccess:()=>{toast.success('Workflow and transmittal settings updated');onSaved()},onError:e=>toast.error(getApiError(e))})
+  const overrideLists=Object.values(projectSteps)
+  const invalid=[...steps,...overrideLists.flat(),...reviewers,...Object.values(labels),...prefixes].some(value=>!value.trim())||!prefixes.length||new Set(steps.map(value=>value.trim().toLowerCase())).size!==steps.length||new Set(reviewers.map(value=>value.trim().toLowerCase())).size!==reviewers.length||new Set(activeSteps.map(value=>value.trim().toLowerCase())).size!==activeSteps.length||!steps.length||!activeSteps.length
   const addPrefix=()=>{const value=prefixDraft.trim();if(value&&!prefixes.includes(value))setPrefixes(previous=>[...previous,value]);setPrefixDraft('')}
+  const editingLocked=scope!=='ALL'&&!custom
   return <div className="workflow-config-editor">
-    <div className="workflow-config-block"><div className="workflow-config-title"><div><strong>Submission Progress</strong><span>Exactly four stages. Use arrows to change the sequence.</span></div><small>4 stages</small></div><div className="workflow-step-list">{steps.map((step,index)=><div className="workflow-step-row" key={index}><b>{index+1}</b><input aria-label={`Submission step ${index+1}`} value={step} onChange={event=>setSteps(previous=>previous.map((value,i)=>i===index?event.target.value:value))}/><button type="button" disabled={index===0} onClick={()=>move(index,-1)} aria-label="Move stage up"><ArrowUp/></button><button type="button" disabled={index===steps.length-1} onClick={()=>move(index,1)} aria-label="Move stage down"><ArrowDown/></button></div>)}</div></div>
-    <div className="workflow-config-side"><div className="workflow-config-block"><div className="workflow-config-title"><div><strong>Feedback reviewers</strong><span>Names shown in Feedback progress.</span></div></div><div className="workflow-reviewer-list">{reviewers.map((reviewer,index)=><label key={index}><span>Reviewer {index+1}</span><input value={reviewer} onChange={event=>setReviewers(previous=>previous.map((value,i)=>i===index?event.target.value:value))}/></label>)}</div></div>
-    <div className="workflow-config-block"><div className="workflow-config-title"><div><strong>Feedback status labels</strong><span>Edit the label and choose its display color.</span></div></div><div className="workflow-status-list">{(['A','B','C','P'] as FeedbackStatusCode[]).map(code=><label key={code}><b>{code}</b><input value={labels[code]} onChange={event=>setLabels(previous=>({...previous,[code]:event.target.value}))}/><input className="label-color-input" type="color" aria-label={`${code} label color`} value={colors[code]} onChange={event=>setColors(previous=>({...previous,[code]:event.target.value}))}/></label>)}</div></div>
-    <div className="workflow-config-block"><div className="workflow-config-title"><div><strong>Transmittal number filters</strong><span>Quick-filter prefixes shown beside the Transmittal search box.</span></div><small>{prefixes.length} types</small></div><div className="workflow-prefix-list">{prefixes.map(prefix=><div key={prefix}><code>{prefix}</code><button type="button" aria-label={`Remove ${prefix}`} disabled={prefixes.length===1} onClick={()=>setPrefixes(previous=>previous.filter(value=>value!==prefix))}><X/></button></div>)}</div><div className="workflow-prefix-add"><input value={prefixDraft} maxLength={80} placeholder="Add a prefix" onChange={event=>setPrefixDraft(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addPrefix()}}}/><button type="button" onClick={addPrefix} disabled={!prefixDraft.trim()}><Plus/></button></div></div></div>
+    <div className="workflow-config-block">
+      <div className="workflow-config-title"><div><strong>Submission Progress</strong><span>Default stages apply to every project. Choose a project to use a different number of stages or names.</span></div><small>{activeSteps.length} stage{activeSteps.length===1?'':'s'}</small></div>
+      <label className="submission-scope"><span>Applies to</span><select aria-label="Submission Progress project" value={scope} onChange={event=>setScope(event.target.value)}><option value="ALL">All projects (default)</option>{codes.map(code=><option key={code} value={code}>{code} · {projectLabels[code]}{projectSteps[code]?' · custom':''}</option>)}</select></label>
+      {scope!=='ALL'&&<label className="editor-switch-row submission-custom-switch"><div><strong>Customize for {scope}</strong><span>{custom?'This project uses its own stages. Turn off to follow the default list.':'Currently using the default stages.'}</span></div><span className="switch"><input type="checkbox" checked={custom} onChange={event=>{if(event.target.checked)setProjectSteps(previous=>({...previous,[scope]:[...(previous[scope]||steps)]}));else setProjectSteps(previous=>{const next={...previous};delete next[scope];return next})}}/><i/></span></label>}
+      <div className={`workflow-step-list ${editingLocked?'is-locked':''}`}>{activeSteps.map((step,index)=><div className="workflow-step-row" key={index}><b>{index+1}</b><input aria-label={`Submission step ${index+1}`} value={step} disabled={editingLocked} onChange={event=>setActiveSteps(previous=>previous.map((value,i)=>i===index?event.target.value:value))}/><button type="button" disabled={editingLocked||index===0} onClick={()=>move(index,-1)} aria-label="Move stage up"><ArrowUp/></button><button type="button" disabled={editingLocked||index===activeSteps.length-1} onClick={()=>move(index,1)} aria-label="Move stage down"><ArrowDown/></button><button type="button" disabled={editingLocked||activeSteps.length<=1} onClick={()=>removeStep(index)} aria-label="Remove stage"><X/></button></div>)}</div>
+      <button type="button" className="secondary-button submission-add-step" disabled={editingLocked||activeSteps.length>=12} onClick={addStep}><Plus/> Add stage</button>
+    </div>
+    <div className="workflow-config-side">
+      <div className="workflow-config-block">
+        <div className="workflow-config-title"><div><strong>Feedback reviewers</strong><span>Names shown in Feedback progress.</span></div></div>
+        <div className="workflow-reviewer-list">{reviewers.map((reviewer,index)=><label key={index}><span>Reviewer {index+1}</span><input value={reviewer} onChange={event=>setReviewers(previous=>previous.map((value,i)=>i===index?event.target.value:value))}/></label>)}</div>
+      </div>
+      <div className="workflow-config-block">
+        <div className="workflow-config-title"><div><strong>Feedback status labels</strong><span>Edit the label and choose its display color.</span></div></div>
+        <div className="workflow-status-list">{(['A','B','C','P'] as FeedbackStatusCode[]).map(code=><label key={code}><b>{code}</b><input value={labels[code]} onChange={event=>setLabels(previous=>({...previous,[code]:event.target.value}))}/><input className="label-color-input" type="color" aria-label={`${code} label color`} value={colors[code]} onChange={event=>setColors(previous=>({...previous,[code]:event.target.value}))}/></label>)}</div>
+      </div>
+    </div>
+    <div className="workflow-config-block">
+      <div className="workflow-config-title"><div><strong>Transmittal number filters</strong><span>Quick-filter prefixes shown beside the Transmittal search box.</span></div><small>{prefixes.length} types</small></div>
+      <div className="workflow-prefix-list">{prefixes.map(prefix=><div key={prefix}><code>{prefix}</code><button type="button" aria-label={`Remove ${prefix}`} disabled={prefixes.length===1} onClick={()=>setPrefixes(previous=>previous.filter(value=>value!==prefix))}><X/></button></div>)}</div>
+      <div className="workflow-prefix-add"><input value={prefixDraft} maxLength={80} placeholder="Add a prefix" onChange={event=>setPrefixDraft(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addPrefix()}}}/><button type="button" onClick={addPrefix} disabled={!prefixDraft.trim()}><Plus/></button></div>
+    </div>
     <div className="workflow-config-actions"><p>Existing document progress is preserved by stage/reviewer position when names change.</p><button className="primary-button" disabled={save.isPending||invalid} onClick={()=>save.mutate()}>{save.isPending?<LoaderCircle className="spin"/>:<Save/>} Save workflow structure</button></div>
   </div>
 }
 
 function ColumnConfigRow({config,onSaved}:{config:ColumnConfig;onSaved:()=>void}){
+  const {codes,labels}=useProjects()
+  const poolField=config.field_name==='initiator'||config.field_name==='discipline'
   const [name,setName]=useState(config.display_name)
   const [visible,setVisible]=useState(config.is_visible)
   const [width,setWidth]=useState(config.column_width)
   const [type,setType]=useState(config.input_type)
   const [options,setOptions]=useState(config.options)
   const [optionColors,setOptionColors]=useState(config.option_colors||{})
+  const [share,setShare]=useState(config.share_options!==false)
+  const [projectOptions,setProjectOptions]=useState<Record<string,string[]>>({...(config.project_options||{})})
+  const [projectColors,setProjectColors]=useState<Record<string,Record<string,string>>>({...(config.project_option_colors||{})})
+  const [poolProject,setPoolProject]=useState(codes[0]||'NFS')
   const [draft,setDraft]=useState('')
   const inputEditable=!['submission_progress','feedback'].includes(config.field_name)
-  useEffect(()=>{setName(config.display_name);setVisible(config.is_visible);setWidth(config.column_width);setType(config.input_type);setOptions(config.options);setOptionColors(config.option_colors||{})},[config])
-  const save=useMutation({mutationFn:()=>settingsApi.updateColumn(config.field_name,{display_name:name.trim(),is_visible:visible,column_width:width,input_type:type,options,option_colors:Object.fromEntries(options.map((option,index)=>[option,optionColors[option]||palette[index%palette.length]]))}),onSuccess:()=>{toast.success(`${name.trim()} column updated`);onSaved()},onError:e=>toast.error(getApiError(e))})
-  const add=()=>{const value=draft.trim();if(value&&!options.includes(value)){setOptions([...options,value]);setOptionColors(previous=>({...previous,[value]:palette[options.length%palette.length]}))}setDraft('')}
-  const remove=(option:string)=>{setOptions(options.filter(value=>value!==option));setOptionColors(previous=>{const next={...previous};delete next[option];return next})}
-  return <div className="config-row"><div className="config-name"><strong>{config.display_name}</strong><code>{config.field_name}</code></div><input className="config-text-input" value={name} maxLength={120} onChange={event=>setName(event.target.value)}/><label className="config-visibility"><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/><i/><span>{visible?'Shown':'Hidden'}</span></label><label className="config-width"><input type="number" min={72} max={500} value={width} onChange={event=>setWidth(Math.min(500,Math.max(72,Number(event.target.value)||72)))}/><span>px</span></label>{inputEditable?<div className="type-toggle"><button className={type==='text'?'active':''} onClick={()=>setType('text')}>Text</button><button className={type==='select'?'active':''} onClick={()=>setType('select')}>Dropdown</button></div>:<span className="config-na">Read only</span>}<div className={`option-editor ${!inputEditable||type==='text'?'disabled':''}`}><div className="option-chips">{inputEditable&&options.map((option,index)=><span key={option} style={{color:optionColors[option]||palette[index%palette.length],backgroundColor:`color-mix(in srgb, ${optionColors[option]||palette[index%palette.length]} 12%, white)`}}><input type="color" aria-label={`${option} color`} value={optionColors[option]||palette[index%palette.length]} onChange={event=>setOptionColors(previous=>({...previous,[option]:event.target.value}))}/>{option}<button onClick={()=>remove(option)}><X/></button></span>)}</div>{inputEditable&&type==='select'&&<div className="option-input"><input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}} placeholder="Add an option"/><button onClick={add}><Plus/></button></div>}</div><button className="save-config" disabled={save.isPending||!name.trim()||(inputEditable&&type==='select'&&!options.length)} onClick={()=>save.mutate()}>{save.isPending?<LoaderCircle className="spin"/>:<Save/>}</button></div>
+  useEffect(()=>{
+    setName(config.display_name);setVisible(config.is_visible);setWidth(config.column_width);setType(config.input_type)
+    setOptions(config.options);setOptionColors(config.option_colors||{})
+    setShare(config.share_options!==false);setProjectOptions({...(config.project_options||{})});setProjectColors({...(config.project_option_colors||{})})
+  },[config])
+  const usingProjectPool=poolField&&!share&&type==='select'
+  const activeOptions=usingProjectPool?(projectOptions[poolProject]||[]):options
+  const activeColors=usingProjectPool?(projectColors[poolProject]||{}):optionColors
+  const colorFor=(option:string,index:number)=>activeColors[option]||palette[index%palette.length]
+  const setActiveOptions=(next:string[])=>{
+    if(usingProjectPool)setProjectOptions(previous=>({...previous,[poolProject]:next}))
+    else setOptions(next)
+  }
+  const setActiveColor=(option:string,color:string)=>{
+    if(usingProjectPool)setProjectColors(previous=>({...previous,[poolProject]:{...(previous[poolProject]||{}),[option]:color}}))
+    else setOptionColors(previous=>({...previous,[option]:color}))
+  }
+  const enablePerProject=()=>{
+    setType('select');setShare(false)
+    setProjectOptions(previous=>{
+      const next={...previous}
+      const seed=options.length?options:previous[poolProject]||[]
+      for(const code of codes)if(!next[code]?.length)next[code]=[...seed]
+      if(!next[poolProject]?.length)next[poolProject]=[...seed]
+      return next
+    })
+  }
+  const save=useMutation({mutationFn:()=>settingsApi.updateColumn(config.field_name,{
+    display_name:name.trim(),is_visible:visible,column_width:width,input_type:type,
+    options:type==='select'?options:[],
+    option_colors:Object.fromEntries((type==='select'?options:[]).map((option,index)=>[option,optionColors[option]||palette[index%palette.length]])),
+    share_options:!poolField||share,
+    project_options:poolField&&!share?projectOptions:{},
+    project_option_colors:poolField&&!share?projectColors:{},
+  }),onSuccess:()=>{toast.success(`${name.trim()} column updated`);onSaved()},onError:e=>toast.error(getApiError(e))})
+  const add=()=>{const value=draft.trim();if(value&&!activeOptions.includes(value)){setActiveOptions([...activeOptions,value]);setActiveColor(value,palette[activeOptions.length%palette.length])}setDraft('')}
+  const remove=(option:string)=>{setActiveOptions(activeOptions.filter(value=>value!==option))}
+  const dirty=name!==config.display_name||visible!==config.is_visible||width!==config.column_width||type!==config.input_type||JSON.stringify(options)!==JSON.stringify(config.options)||(poolField&&share!==(config.share_options!==false))||JSON.stringify(projectOptions)!==JSON.stringify(config.project_options||{})||JSON.stringify(optionColors)!==JSON.stringify(config.option_colors||{})||JSON.stringify(projectColors)!==JSON.stringify(config.project_option_colors||{})
+  const saveDisabled=save.isPending||!name.trim()||(inputEditable&&type==='select'&&!activeOptions.length)||!dirty
+  return <article className={`column-card ${poolField?'has-pool':''} ${dirty?'is-dirty':''} ${visible?'':'is-hidden'}`}>
+    <header className="column-card-head">
+      <div className="config-name"><strong>{config.display_name}</strong><code>{config.field_name}</code></div>
+      {dirty&&<em className="column-dirty">Unsaved</em>}
+      <label className="config-visibility"><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/><i/><span>{visible?'Shown':'Hidden'}</span></label>
+      <button type="button" className="save-config" disabled={saveDisabled} onClick={()=>save.mutate()}>{save.isPending?<LoaderCircle className="spin"/>:<Save/>} Save</button>
+    </header>
+    <div className="column-card-fields">
+      <label><span>Display name</span><input className="config-text-input" value={name} maxLength={120} onChange={event=>setName(event.target.value)}/></label>
+      <label><span>Width</span><span className="config-width"><input type="number" min={72} max={500} value={width} onChange={event=>setWidth(Math.min(500,Math.max(72,Number(event.target.value)||72)))}/><span>px</span></span></label>
+      <div className="column-card-type"><span>Input type</span>{inputEditable?<div className="type-toggle"><button type="button" className={type==='text'?'active':''} onClick={()=>{setType('text');if(poolField)setShare(true)}}>Text</button><button type="button" className={type==='select'?'active':''} onClick={()=>setType('select')}>Dropdown</button></div>:<span className="config-na">Read only</span>}</div>
+    </div>
+    {inputEditable&&type==='select'&&<div className="column-card-options option-editor">
+      {poolField&&<div className="pool-toggle" role="group" aria-label="Option pool sharing"><button type="button" className={share?'active':''} onClick={()=>setShare(true)}>Shared pool</button><button type="button" className={usingProjectPool?'active':''} onClick={enablePerProject}>Per project</button></div>}
+      {usingProjectPool&&<label className="pool-project"><span>Project</span><select aria-label={`${config.display_name} project pool`} value={poolProject} onChange={event=>setPoolProject(event.target.value)}>{codes.map(code=><option key={code} value={code}>{code} · {labels[code]}</option>)}</select></label>}
+      <div className="option-chips">{activeOptions.map((option,index)=><span key={option} style={{color:colorFor(option,index),backgroundColor:`color-mix(in srgb, ${colorFor(option,index)} 12%, white)`}}><input type="color" aria-label={`${option} color`} value={colorFor(option,index)} onChange={event=>setActiveColor(option,event.target.value)}/>{option}<button type="button" onClick={()=>remove(option)}><X/></button></span>)}</div>
+      <div className="option-input"><input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}} placeholder={usingProjectPool?`Add an option for ${poolProject}`:'Add an option'}/><button type="button" onClick={add}><Plus/></button></div>
+    </div>}
+  </article>
 }

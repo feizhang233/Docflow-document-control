@@ -4,6 +4,7 @@ import { Ban, CheckSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRigh
 import { useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getApiError, packagesApi, settingsApi } from '../lib/api'
+import { useAuth } from '../hooks/useAuth'
 import { feedbackSteps, submissionSteps, type FilterRule, type Package, type PackageInput, type PageKind, type Period, type WorkflowConfig } from '../types/package'
 import { EmptyState, ErrorState, LoadingState } from '../components/common/PageState'
 import { PackageTable } from '../components/packages/PackageTable'
@@ -13,7 +14,7 @@ import { BulkPackageEditor, type BulkPackagePatch } from '../components/packages
 import { AdvancedFilter } from '../components/packages/AdvancedFilter'
 import { useDismissableLayer } from '../hooks/useDismissableLayer'
 import { useProjects } from '../hooks/useProjects'
-import { prefixesForProject, projectFilterFrom } from '../lib/projects'
+import { columnOptionsFor, prefixesForProject, projectFilterFrom, submissionStepsFor } from '../lib/projects'
 
 const meta = {
   documents: ['Documents', 'Manage submissions and monitor every stage of your document register.'],
@@ -23,6 +24,7 @@ const meta = {
 const defaultWorkflowConfig: WorkflowConfig = {
   id: 1,
   submission_steps: [...submissionSteps],
+  project_submission_steps: {},
   feedback_reviewers: [...feedbackSteps],
   feedback_status_labels: { A: 'Approved', B: 'Approved with comments', C: 'Rejected', P: 'Pending' },
   feedback_status_colors: { A: '#21815d', B: '#9b6816', C: '#b13f4c', P: '#4267bd' },
@@ -34,8 +36,12 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const { period: routePeriod } = useParams()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const {codes, labels} = useProjects()
-  const selectedProject = projectFilterFrom(searchParams.get('project'), codes)
+  const {codes, labels, canSeeAll} = useProjects()
+  const {can} = useAuth()
+  const canWrite = can('packages:write')
+  const canDelete = can('packages:delete')
+  const canManageColumns = can('settings:write')
+  const selectedProject = projectFilterFrom(searchParams.get('project'), codes, canSeeAll)
   const focusParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const focusValue = focusParams.get('focus') || ''
   const focusPackageId = Number(focusParams.get('package')) || null
@@ -66,6 +72,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const workflowQuery = useQuery({ queryKey: ['workflow-config'], queryFn: settingsApi.getWorkflow })
   const workflowConfig = workflowQuery.data || defaultWorkflowConfig
   const currentSubmissionSteps = workflowConfig.submission_steps
+  const stepsForProject = (projectCode: string) => submissionStepsFor(workflowConfig, projectCode)
   const currentFeedbackReviewers = workflowConfig.feedback_reviewers
   const transmittalPrefixes = useMemo(() => prefixesForProject(workflowConfig.transmittal_prefixes, selectedProject, codes), [workflowConfig.transmittal_prefixes, selectedProject, codes])
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['packages'] })
@@ -219,9 +226,15 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   }, [query.data?.items, focusValue, focusPackageId, location.key])
   const disciplines = useMemo(() => {
     const config = configs.data?.find((item) => item.field_name === 'discipline')
-    if (config?.input_type === 'select') return config.options
-    return Array.from(new Set((query.data?.items || []).map((item) => item.discipline).filter(Boolean))).sort()
-  }, [configs.data, query.data?.items])
+    if (config?.input_type !== 'select') return Array.from(new Set((query.data?.items || []).map((item) => item.discipline).filter(Boolean))).sort()
+    if (selectedProject !== 'ALL') return columnOptionsFor(config, selectedProject)
+    if (config.share_options !== false) return config.options
+    return Array.from(new Set([
+      ...Object.values(config.project_options || {}).flat(),
+      ...config.options,
+      ...(query.data?.items || []).map((item) => item.discipline).filter(Boolean),
+    ])).sort()
+  }, [configs.data, query.data?.items, selectedProject])
   const visibleItems = useMemo(() => {
     const items = query.data?.items || []
     const valueFor = (item: Package, field: FilterRule['field']): string => {
@@ -251,7 +264,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   }, [visibleItems])
   const advance = (item: Package, type: 'submission' | 'feedback') => {
     if (type === 'submission') {
-      const next = currentSubmissionSteps.find((step) => !item.submission_progress[step])
+      const next = stepsForProject(item.project_code).find((step) => !item.submission_progress[step])
       if (!next) return
       quickUpdate.mutate({ id: item.id, data: { submission_progress: { ...item.submission_progress, [next]: true } } })
       return
@@ -298,7 +311,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           <p>{meta[kind][1]}</p>
         </div>
         <div className="header-actions">
-          <button
+          {canWrite && <button
             className={`secondary-button ${selectionMode ? 'active-select' : ''}`}
             onClick={() => {
               if (selectionMode) exitSelectionMode()
@@ -310,8 +323,8 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           >
             {selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}
             {selectionMode ? 'Cancel select' : 'Select'}
-          </button>
-          <button className="primary-button" onClick={() => { setEditing(null); setEditorOpen(true) }}><Plus size={17} /> New document</button>
+          </button>}
+          {canWrite && <button className="primary-button" onClick={() => { setEditing(null); setEditorOpen(true) }}><Plus size={17} /> New document</button>}
         </div>
       </div>
       <section className="data-card">
@@ -358,13 +371,13 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
               >
                 <Pencil size={15} /> Edit together
               </button>
-              <button
+              {canDelete && <button
                 className="secondary-button danger-button"
                 disabled={!selectedIds.size || bulkDelete.isPending}
                 onClick={confirmBulkDelete}
               >
                 <Trash2 size={15} /> Delete
-              </button>
+              </button>}
               <div className="bulk-more" ref={bulkMenuRef}>
                 <button
                   className="secondary-button"
@@ -408,6 +421,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             kind={kind}
             configs={configs.data || []}
             submissionSteps={currentSubmissionSteps}
+            submissionStepsFor={stepsForProject}
             feedbackReviewers={currentFeedbackReviewers}
             feedbackStatusLabels={workflowConfig.feedback_status_labels}
             feedbackStatusColors={workflowConfig.feedback_status_colors}
@@ -422,12 +436,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             }}
             onView={setSelected}
             onEdit={(item) => { setEditing(item); setEditorOpen(true) }}
+            canWrite={canWrite}
+            canDelete={canDelete}
             onColumnResize={(field, width) => {
               const config = configs.data?.find((item) => item.field_name === field)
-              if (config) resizeColumn.mutate({ config, width })
+              if (config && canManageColumns) resizeColumn.mutate({ config, width })
             }}
-            onReorder={(ids) => reorder.mutate({ ids, startIndex: (page - 1) * pageSize })}
-            onAdvance={advance}
+            onReorder={(ids) => { if (canWrite) reorder.mutate({ ids, startIndex: (page - 1) * pageSize }) }}
+            onAdvance={canWrite ? advance : undefined}
             onDuplicate={(item) => duplicate.mutate(item)}
             onToggleAbandoned={(item) => quickUpdate.mutate({ id: item.id, data: { is_abandoned: !item.is_abandoned } })}
             onToggleTerminate={(item) => quickUpdate.mutate({ id: item.id, data: { workflow_terminated: !item.workflow_terminated } })}
@@ -459,7 +475,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           </div>
         )}
       </section>
-      <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
+      <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!canWrite} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
       <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} />
       <BulkPackageEditor
         items={selectedItems}
