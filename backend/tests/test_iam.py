@@ -5,9 +5,18 @@ from tests.helpers import ADMIN_USERNAME, login
 def test_unauthenticated_ui_routes_are_rejected(anon_client):
     assert anon_client.get("/api/packages").status_code == 401
     assert anon_client.get("/api/settings/projects").status_code == 401
+    assert anon_client.get("/api/settings/workflow").status_code == 401
     assert anon_client.get("/api/notifications").status_code == 401
     assert anon_client.get("/api/iam/users").status_code == 401
     assert anon_client.get("/api/health").status_code == 200
+
+
+def test_external_api_key_can_read_workflow_settings(anon_client):
+    denied = anon_client.get("/api/external/settings/workflow", headers={"X-API-Key": "wrong"})
+    assert denied.status_code == 401
+    allowed = anon_client.get("/api/external/settings/workflow", headers={"X-API-Key": "test-external-key"})
+    assert allowed.status_code == 200
+    assert allowed.json()["feedback_reviewers"] == ["UTIBER", "GDS"]
 
 
 def test_login_me_and_logout(anon_client):

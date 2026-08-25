@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.repositories.package_repository import PackageRepository
 from app.schemas.notification import ExternalWorkflowUpdate
 from app.schemas.package import PackageRead
+from app.schemas.settings import WorkflowConfigRead
 from app.schemas.workflow_comment import (
     WorkflowCommentList,
     WorkflowCommentsBulkImport,
@@ -56,6 +57,20 @@ def _values_for_package(item, data: ExternalWorkflowUpdate) -> dict:
     if data.terminate_workflow is not None:
         values["workflow_terminated"] = data.terminate_workflow
     return values
+
+
+@router.get(
+    "/settings/workflow",
+    response_model=WorkflowConfigRead,
+    dependencies=[Depends(verify_api_key)],
+)
+def get_workflow_settings(db: Session = Depends(get_db)):
+    """Return reviewer names and workflow labels for unattended Aconex sync.
+
+    The UI route ``GET /api/settings/workflow`` requires a logged-in user.
+    Automation authenticates with ``X-API-Key`` and must use this endpoint.
+    """
+    return SettingsService(db).get_workflow_config()
 
 
 @router.patch("/workflows/{workflow_number}", response_model=PackageRead, dependencies=[Depends(verify_api_key)])
