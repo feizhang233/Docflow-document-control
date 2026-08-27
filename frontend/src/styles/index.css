@@ -544,7 +544,9 @@ button:not(:disabled), a[href], select:not(:disabled), input[type='checkbox']:no
 .pagination-controls button { color: var(--color-muted); border-color: var(--color-border); background: var(--color-surface); }
 .pagination-controls button:hover:not(:disabled) { color: var(--color-primary-strong); border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border)); }
 .pagination-controls select { color: var(--color-text); border-color: var(--color-border); background: var(--color-surface); }
-.row-menu-popover, .bulk-more-popover, .filter-popover, .notification-popover, .user-menu-popover { z-index: var(--z-popover); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-float); animation: popoverIn 180ms cubic-bezier(.22,1,.36,1) both; }
+.row-menu-popover, .bulk-more-popover, .filter-popover, .user-menu-popover { z-index: var(--z-popover); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-float); animation: popoverIn 180ms cubic-bezier(.22,1,.36,1) both; }
+.notification-popover { position: fixed; inset: 64px 0 0 auto; z-index: var(--z-popover); width: min(560px, calc(100vw - 20px)); max-width: calc(100vw - 20px); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 12px 0 0 0; background: var(--color-surface); box-shadow: var(--shadow-float); display: flex; flex-direction: column; overflow: hidden; animation: notificationRailIn .22s ease-out; }
+@media (max-width: 760px) { .notification-popover { inset: 58px 0 0; width: auto; max-width: none; border-radius: 12px 12px 0 0; } }
 .row-menu-popover button, .bulk-more-popover button, .user-menu-popover button { color: var(--color-text); }
 .row-menu-popover button:hover, .bulk-more-popover button:hover, .user-menu-popover button:hover { background: var(--color-surface-muted); }
 .row-menu-popover .danger, .user-menu-popover .danger, .notification-header-actions .danger { color: var(--color-danger); }

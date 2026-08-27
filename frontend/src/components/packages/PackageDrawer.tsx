@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Ban, Calendar, FileStack, FileText, Hash, MessageSquareText, OctagonX, Paperclip, RefreshCw, Save, UserRound, X } from 'lucide-react'
@@ -34,7 +35,7 @@ export function PackageDrawer({item,configs,workflowConfig,saving,readOnly=false
   const feedbackFetching=commentsQuery.isFetching||feedbackQuery.isFetching
   const typeColor=configs.find(config=>config.field_name==='document_type')?.option_colors[item.document_type]
   const commitSlider=(value:number)=>onUpdate({submission_progress:Object.fromEntries(submissionSteps.map((step,index)=>[step,index<value])) as PackageInput['submission_progress']})
-  return <div className="drawer-layer" role="dialog" aria-modal="true" aria-label="Document details"><div className="drawer-backdrop" onClick={onClose}/><aside className="detail-drawer"><header><div><span className="eyebrow">Document details</span><h2>{item.document_number}</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header><div className="drawer-body">
+  return createPortal(<div className="drawer-layer" role="dialog" aria-modal="true" aria-label="Document details"><div className="drawer-backdrop" onClick={onClose}/><aside className="detail-drawer"><header><div><span className="eyebrow">Document details</span><h2>{item.document_number}</h2></div><button className="icon-button" onClick={onClose}><X size={19}/></button></header><div className="drawer-body">
     <div className={`detail-hero ${item.is_abandoned?'abandoned':''}`}><div className="hero-badges"><span className={`badge project-badge project-${item.project_code.toLowerCase()}`}>{item.project_code}</span><StatusBadge status={item.document_type||'Unclassified'} color={typeColor}/>{item.is_abandoned&&<span className="badge abandoned"><Ban/>Abandoned</span>}{item.workflow_terminated&&<span className="badge terminated"><OctagonX/>Workflow terminated</span>}</div><h3>{item.discipline||'No discipline'}</h3><p>Last updated {new Date(item.updated_at).toLocaleString()}</p></div>
     <div className="detail-grid"><div className="document-title-detail"><FileText/><span>Document Title</span><strong>{item.document_title||'—'}</strong></div><div><UserRound/><span>Initiator</span><strong>{item.initiator||'—'}</strong></div><div><FileStack/><span>Documents</span><strong>{item.number_of_documents}</strong></div><div><Hash/><span>Workflow</span><strong>{item.workflow_number||'—'}</strong></div><div><Hash/><span>Transmittal</span><strong>{item.transmittal_number||'—'}</strong></div><div><Calendar/><span>Date</span><strong>{item.has_attachment?'Attachment':item.document_date}</strong></div><div><OctagonX/><span>Terminate Workflow</span><strong>{item.workflow_terminated?'Terminated':'Not terminated'}</strong></div></div>
     <section className="drawer-section attachment-section"><div><Paperclip/><div><h4>Has attachment</h4><p>Highlight this document and replace its date display with an attachment label.</p></div></div><label className="switch"><input type="checkbox" checked={item.has_attachment} disabled={readOnly} onChange={e=>onUpdate({has_attachment:e.target.checked})}/><i/></label></section>
@@ -55,5 +56,5 @@ export function PackageDrawer({item,configs,workflowConfig,saving,readOnly=false
           :<div className="workflow-feedback-state">No workflow feedback received yet.</div>}
       </div>
     </section>
-  </div></aside></div>
+  </div></aside></div>, document.body)
 }
