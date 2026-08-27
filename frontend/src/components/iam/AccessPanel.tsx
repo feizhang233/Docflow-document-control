@@ -7,6 +7,8 @@ import { getApiError, iamApi } from '../../lib/api'
 import { useProjects } from '../../hooks/useProjects'
 import { useAuth } from '../../hooks/useAuth'
 import { initials, type AuthUser, type Role } from '../../types/iam'
+import { SecretInput } from '../common/SecretInput'
+import { ConfirmDialog } from '../common/ConfirmDialog'
 
 const emptyCreate = {
   username: '',
@@ -119,6 +121,7 @@ function UserEditor({
     all_projects: user.all_projects,
     project_codes: user.project_codes,
   } : { ...emptyCreate })
+  const [toggleOpen, setToggleOpen] = useState(false)
   const create = useMutation({
     mutationFn: () => iamApi.createUser({
       username: form.username,
@@ -168,7 +171,7 @@ function UserEditor({
   return (
     <div className="modal-layer">
       <div className="modal-backdrop" onClick={onClose} />
-      <form className="editor-modal iam-editor" onSubmit={submit}>
+      <form className="editor-modal iam-editor" onSubmit={submit} noValidate>
         <header>
           <div>
             <span className="eyebrow">Access</span>
@@ -181,7 +184,7 @@ function UserEditor({
             <label><span>Display name</span><input value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} required /></label>
             <label><span>Username</span><input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required disabled={mode === 'edit'} autoComplete="off" /></label>
             <label className="span-2"><span>Email</span><input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label>
-            {mode === 'create' && <label className="span-2"><span>Temporary password</span><input type="text" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} minLength={10} required autoComplete="new-password" /></label>}
+            {mode === 'create' && <label className="span-2"><span>Temporary password</span><SecretInput value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} minLength={10} required autoComplete="new-password" revealLabel="temporary password" /></label>}
           </div>
           <fieldset>
             <legend>Roles</legend>
@@ -218,11 +221,22 @@ function UserEditor({
           </fieldset>
         </div>
         <footer>
-          {mode === 'edit' && user && <button type="button" className="secondary-button danger-button" disabled={toggleActive.isPending} onClick={() => toggleActive.mutate()}>{user.is_active ? 'Disable user' : 'Enable user'}</button>}
+          {mode === 'edit' && user && <button type="button" className={`secondary-button ${user.is_active ? 'danger-button' : ''}`} disabled={toggleActive.isPending} onClick={() => setToggleOpen(true)}>{user.is_active ? 'Disable user' : 'Enable user'}</button>}
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
           <button className="primary-button" type="submit" disabled={pending}>{pending ? <LoaderCircle className="spin" /> : <Check size={16} />} {mode === 'create' ? 'Create user' : 'Save changes'}</button>
         </footer>
       </form>
+      {mode === 'edit' && user && <ConfirmDialog
+        open={toggleOpen}
+        title={`${user.is_active ? 'Disable' : 'Enable'} ${user.display_name}?`}
+        description={user.is_active
+          ? <>This account will be signed out and will no longer be able to access assigned DocFlow projects.</>
+          : <>This account will regain access according to its assigned roles and projects.</>}
+        confirmLabel={`${user.is_active ? 'Disable' : 'Enable'} user`}
+        tone={user.is_active ? 'danger' : 'warning'}
+        onClose={() => setToggleOpen(false)}
+        onConfirm={() => toggleActive.mutateAsync()}
+      />}
     </div>
   )
 }
@@ -237,7 +251,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: AuthUser; onClo
   return (
     <div className="modal-layer">
       <div className="modal-backdrop" onClick={onClose} />
-      <form className="editor-modal password-gate-card" onSubmit={(event) => { event.preventDefault(); reset.mutate() }}>
+      <form className="editor-modal password-gate-card" noValidate onSubmit={(event) => { event.preventDefault(); reset.mutate() }}>
         <header>
           <div>
             <span className="eyebrow">Access</span>
@@ -248,7 +262,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: AuthUser; onClo
         <div className="editor-body">
           <p className="password-gate-copy">Set a temporary password for {user.display_name}. They will have to change it at next sign-in.</p>
           <div className="form-grid">
-            <label className="span-2"><span>New temporary password</span><input value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} required /></label>
+            <label className="span-2"><span>New temporary password</span><SecretInput value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} required autoComplete="new-password" revealLabel="temporary password" /></label>
           </div>
         </div>
         <footer>

@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, CheckCircle2, Clock3, FileCheck2, Files, History, ListChecks, MessageSquareText, Send, TrendingUp } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Clock3, FileCheck2, Files, History, ListChecks, MessageSquareText, Radio, Send, TrendingUp } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { notificationsApi, packagesApi, settingsApi } from '../lib/api'
 import { getEffectiveFeedbackStatus } from '../components/packages/FeedbackStatus'
 import { feedbackStatusLabels, feedbackSteps, type FeedbackStatusCode, type Package, type ProjectFilter, type WorkflowNotification } from '../types/package'
 import { useProjects } from '../hooks/useProjects'
 import { projectFilterFrom, submissionStepsFor } from '../lib/projects'
+import { useAuth } from '../hooks/useAuth'
 
 const defaultColors:Record<FeedbackStatusCode,string>={A:'#21815d',B:'#9b6816',C:'#b13f4c',P:'#4267bd'}
 
 export function DashboardPage() {
+  const { user } = useAuth()
   const [searchParams]=useSearchParams()
   const {codes,labels,canSeeAll}=useProjects()
   const selectedProject=projectFilterFrom(searchParams.get('project'),codes,canSeeAll)
@@ -58,13 +60,31 @@ export function DashboardPage() {
   const statusGradient=items.length?`conic-gradient(${statusRows.map(row=>{const start=offset;offset+=row.count/items.length*100;return `${row.color} ${start}% ${offset}%`}).join(',')})`:'#e7ebf1'
   const dateLabel=today.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
   const registerSearch=(project:ProjectFilter=selectedProject,extra:Record<string,string>={})=>{const params=new URLSearchParams(extra);if(project!=='ALL')params.set('project',project);return params.toString()?`?${params}`:''}
+  const firstName=user?.display_name?.trim().split(/\s+/)[0]||'there'
   return <>
-    <div className="page-header dashboard-heading"><div><div className="breadcrumb">{dateLabel} <span>/</span> {labels[selectedProject]}</div><h1>Good morning, Zhang</h1><p>Here’s what needs attention across {labels[selectedProject].toLowerCase()}.</p></div><Link className="primary-button" to={`/documents/week${registerSearch()}`}>Open register <ArrowRight size={16}/></Link></div>
+    <section className="dashboard-hero">
+      <div className="dashboard-hero-copy">
+        <div className="breadcrumb">{dateLabel} <span>/</span> {labels[selectedProject]}</div>
+        <span className="hero-live"><Radio /> Live control room</span>
+        <h1>Good morning, {firstName}.</h1>
+        <p>Here is the document route that needs attention across {labels[selectedProject].toLowerCase()}.</p>
+        <Link className="primary-button" to={`/documents/week${registerSearch()}`}>Open register <ArrowRight size={16}/></Link>
+      </div>
+      <div className="dashboard-route-rail" aria-label="Current document route overview">
+        <div className="route-rail-head"><span>Workspace route</span><strong>{items.length} tracked documents</strong></div>
+        <div className="route-rail-stages">
+          <div className="complete"><i><Files /></i><span><b>Register</b><small>{items.length} total</small></span></div>
+          <div className="active"><i><Clock3 /></i><span><b>Submission</b><small>{active} active</small></span></div>
+          <div><i><MessageSquareText /></i><span><b>Workflow</b><small>{feedbackPending} pending</small></span></div>
+          <div><i><Send /></i><span><b>Transmittal</b><small>Issue control</small></span></div>
+        </div>
+      </div>
+    </section>
     <div className="metric-grid">
-      <Metric icon={<Files/>} tone="blue" label="Total documents" value={data?.total||0} note={labels[selectedProject]}/>
-      <Metric icon={<Clock3/>} tone="amber" label="Active workflows" value={active} note="In submission process"/>
-      <Metric icon={<CheckCircle2/>} tone="green" label="Completed" value={complete} note="All submission stages complete"/>
-      <Metric icon={<FileCheck2/>} tone="purple" label="Awaiting feedback" value={feedbackPending} note={`${currentFeedbackReviewers.join(' or ')} pending`}/>
+      <Metric index={0} icon={<Files/>} tone="blue" label="Total documents" value={data?.total||0} note={labels[selectedProject]}/>
+      <Metric index={1} icon={<Clock3/>} tone="amber" label="Active workflows" value={active} note="In submission process"/>
+      <Metric index={2} icon={<CheckCircle2/>} tone="green" label="Completed" value={complete} note="All submission stages complete"/>
+      <Metric index={3} icon={<FileCheck2/>} tone="purple" label="Awaiting feedback" value={feedbackPending} note={`${currentFeedbackReviewers.join(' or ')} pending`}/>
     </div>
 
     <div className="dashboard-row dashboard-row-primary">
@@ -83,7 +103,7 @@ export function DashboardPage() {
 }
 
 function completedSteps(item:{submission_progress:Record<string,boolean>},steps:readonly string[]){return steps.filter(step=>item.submission_progress[step]).length}
-function Metric({icon,tone,label,value,note}:{icon:React.ReactNode;tone:string;label:string;value:number;note:string}){return <div className="metric-card"><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div></div>}
+function Metric({icon,tone,label,value,note,index}:{icon:React.ReactNode;tone:string;label:string;value:number;note:string;index:number}){return <div className="metric-card stagger-item" style={{animationDelay:`${index*45}ms`}}><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div></div>}
 function notificationDestination(item:WorkflowNotification,packages:Package[]){
   const focus=item.document_number||item.workflow_number
   const current=packages.find(entry=>entry.id===item.package_id)||packages.find(entry=>entry.workflow_number===item.workflow_number&&entry.document_number===item.document_number)

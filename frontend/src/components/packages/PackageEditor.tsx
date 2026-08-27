@@ -71,8 +71,8 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
   }
   return <div className="modal-layer" role="dialog" aria-modal="true">
     <div className="modal-backdrop" onClick={onClose}/>
-    <form className="editor-modal" onSubmit={e=>{e.preventDefault();onSave({...form,document_date:form.document_date||today()})}}>
-      <header><div><span className="eyebrow">{item?'Editing document':'New document'}</span><h2>{item?.document_number||'Create document'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></header>
+    <form className="editor-modal" noValidate onSubmit={e=>{e.preventDefault();onSave({...form,document_date:form.document_date||today()})}}>
+      <header><div><span className="eyebrow">{item?'Editing document':'New document'}</span><h2>{item?.document_number||'Create document'}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close editor"><X size={19}/></button></header>
       <div className="editor-body">
         <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,submission_progress:remapProgress(project,previous.submission_progress),transmittal_number:!previous.transmittal_number||isAutomaticTransmittalNumber(previous.transmittal_number,codes)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{!projects.some(project=>project.code===form.project_code)&&form.project_code&&<option value={form.project_code}>{form.project_code}</option>}{projects.map(project=><option key={project.code} value={project.code}>{project.code} · {labels[project.code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
         <div className="form-grid">{fields.map(field => {

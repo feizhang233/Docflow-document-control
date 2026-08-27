@@ -5,6 +5,7 @@ import { useDismissableLayer } from '../../hooks/useDismissableLayer'
 import { useAuth } from '../../hooks/useAuth'
 import { getApiError } from '../../lib/api'
 import { initials, roleLabel } from '../../types/iam'
+import { SecretInput } from '../common/SecretInput'
 
 export function UserMenu() {
   const { user, logout, changePassword } = useAuth()
@@ -62,7 +63,7 @@ export function UserMenu() {
       {passwordOpen && (
         <div className="modal-layer">
           <div className="modal-backdrop" onClick={() => setPasswordOpen(false)} />
-          <form className="editor-modal password-gate-card" onSubmit={submit}>
+          <form className="editor-modal password-gate-card" onSubmit={submit} noValidate>
             <header>
               <div>
                 <span className="eyebrow">Account</span>
@@ -72,9 +73,9 @@ export function UserMenu() {
             </header>
             <div className="editor-body">
               <div className="form-grid">
-                <label className="span-2"><span>Current password</span><input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label>
-                <label><span>New password</span><input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} required /></label>
-                <label><span>Confirm new password</span><input type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} minLength={10} required /></label>
+                <label className="span-2"><span>Current password</span><SecretInput autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required revealLabel="current password" /></label>
+                <label><span>New password</span><SecretInput autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} required revealLabel="new password" /></label>
+                <label><span>Confirm new password</span><SecretInput autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} minLength={10} required revealLabel="password confirmation" /></label>
               </div>
             </div>
             <footer>

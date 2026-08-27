@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getApiError, metadataApi, packagesApi, settingsApi } from '../lib/api'
 import type { ColumnConfig, CsvImportRow, FeedbackStatusCode, MetadataBackup, ProjectConfig, WorkflowConfig } from '../types/package'
 import { useProjects } from '../hooks/useProjects'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 
 type ImportMode = 'merge'|'replace'
 type CsvImportPreview = { fileName:string; rows:CsvImportRow[] }
@@ -38,6 +39,7 @@ export function SettingsPage() {
   const [csvMode,setCsvMode]=useState<ImportMode>('merge')
   const [section,setSection]=useState<SettingsSection>(()=>canSettings?'columns':canIam?'access':'backup')
   const [columnRegister,setColumnRegister]=useState<ColumnRegister>('documents')
+  const [resetColumnsOpen,setResetColumnsOpen]=useState(false)
   const configs=useQuery({queryKey:['column-configs'],queryFn:settingsApi.listColumns})
   const workflowConfig=useQuery({queryKey:['workflow-config'],queryFn:settingsApi.getWorkflow})
   const {query:projectConfig,codes:projectCodes}=useProjects()
@@ -206,7 +208,7 @@ export function SettingsPage() {
           </div>
           <div className="column-settings-actions">
             <small>{visibleCount} of {configs.data?.length||0} visible</small>
-            <button className="secondary-button" disabled={resetColumns.isPending} onClick={()=>{if(window.confirm('Reset all column names, widths, visibility, colors and input settings?'))resetColumns.mutate()}}>{resetColumns.isPending?<LoaderCircle className="spin"/>:<RotateCcw/>} Reset</button>
+            <button className="secondary-button" disabled={resetColumns.isPending} onClick={()=>setResetColumnsOpen(true)}>{resetColumns.isPending?<LoaderCircle className="spin"/>:<RotateCcw/>} Reset</button>
           </div>
         </div>
         <div className="column-register-tabs" role="tablist" aria-label="Register column settings">
@@ -235,6 +237,15 @@ export function SettingsPage() {
       </section>}
       </div>
     </div>
+    <ConfirmDialog
+      open={resetColumnsOpen}
+      title="Reset every column setting?"
+      description={<>This restores default column names, widths, visibility, colors, and input types across the document registers. <strong>Your saved column customizations will be replaced.</strong></>}
+      confirmLabel="Reset column settings"
+      tone="warning"
+      onClose={()=>setResetColumnsOpen(false)}
+      onConfirm={()=>resetColumns.mutateAsync()}
+    />
   </>
 }
 

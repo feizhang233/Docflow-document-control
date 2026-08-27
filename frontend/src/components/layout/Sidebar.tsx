@@ -1,10 +1,11 @@
-import { BarChart3, Building2, ChevronDown, FileText, Menu, Repeat2, Send, Settings, X } from 'lucide-react'
+import { BarChart3, Building2, ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, Repeat2, Send, Settings, X } from 'lucide-react'
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useProjects } from '../../hooks/useProjects'
 import { projectFilterFrom } from '../../lib/projects'
 import type { ProjectFilter } from '../../types/package'
+import { LogoMark } from '../common/LogoMark'
 
 const documentLinks = [
   ['This Week', '/documents/week'], ['This Month', '/documents/month'],
@@ -31,9 +32,21 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
   return <>
     {mobileOpen && <div className="sidebar-backdrop" onClick={onClose} />}
     <aside className={`sidebar ${mobileOpen ? 'open' : ''} ${collapsed ? 'desktop-collapsed' : ''}`}>
-      <div className="brand"><div className="brand-mark">D</div><div className="brand-copy"><strong>DocFlow</strong><span>Project Controls</span></div><button className="sidebar-close" onClick={onClose} aria-label="Close navigation"><X size={18}/></button></div>
-      <nav className="nav-list">
-        <button className="sidebar-collapse-toggle" onClick={onToggleCollapsed} aria-label={collapsed?'Expand navigation':'Collapse navigation'} title={collapsed?'Expand navigation':'Collapse navigation'}><Menu size={19}/></button>
+      <div className="brand"><LogoMark /><div className="brand-copy"><strong>DocFlow</strong><span>Document control</span></div><button className="sidebar-close" onClick={onClose} aria-label="Close navigation"><X size={18}/></button></div>
+      <div className="sidebar-workspace-label">
+        <span>Workspace</span>
+        <i />
+        <button
+          type="button"
+          className="sidebar-collapse-toggle"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed?'Expand sidebar':'Collapse sidebar'}
+          aria-controls="primary-navigation"
+          aria-expanded={!collapsed}
+          title={collapsed?'Expand sidebar':'Collapse sidebar'}
+        >{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button>
+      </div>
+      <nav className="nav-list" id="primary-navigation">
         <NavLink to="/" end className="nav-item" onClick={onClose} aria-label="Dashboard" title={collapsed?'Dashboard':undefined}><BarChart3 size={18}/><span>Dashboard</span></NavLink>
         <label className="project-switcher" title={collapsed?labels[selectedProject]:undefined}>
           <Building2 size={18}/>

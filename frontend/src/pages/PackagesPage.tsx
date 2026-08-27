@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, CheckSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, MoreHorizontal, OctagonX, Pencil, Plus, RotateCcw, Search, Square, Trash2, X } from 'lucide-react'
+import { AlignJustify, Ban, CheckSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, MoreHorizontal, OctagonX, Pencil, Plus, RotateCcw, Search, Square, Trash2, X } from 'lucide-react'
 import { useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getApiError, packagesApi, settingsApi } from '../lib/api'
@@ -15,6 +15,7 @@ import { AdvancedFilter } from '../components/packages/AdvancedFilter'
 import { useDismissableLayer } from '../hooks/useDismissableLayer'
 import { useProjects } from '../hooks/useProjects'
 import { columnOptionsFor, prefixesForProject, projectFilterFrom, submissionStepsFor } from '../lib/projects'
+import { ConfirmDialog } from '../components/common/ConfirmDialog'
 
 const meta = {
   documents: ['Documents', 'Manage submissions and monitor every stage of your document register.'],
@@ -35,7 +36,7 @@ const defaultWorkflowConfig: WorkflowConfig = {
 export function PackagesPage({ kind }: { kind: PageKind }) {
   const { period: routePeriod } = useParams()
   const location = useLocation()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {codes, labels, canSeeAll} = useProjects()
   const {can} = useAuth()
   const canWrite = can('packages:write')
@@ -46,22 +47,29 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const focusValue = focusParams.get('focus') || ''
   const focusPackageId = Number(focusParams.get('package')) || null
   const period = kind === 'documents' ? (routePeriod as Period || 'week') : 'all'
-  const [search, setSearch] = useState('')
-  const [discipline, setDiscipline] = useState('')
-  const [transmittalPrefix, setTransmittalPrefix] = useState('')
-  const [sortBy, setSortBy] = useState(kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_date')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('q') || '')
+  const [search, setSearch] = useState(() => searchParams.get('q') || '')
+  const [isComposing, setIsComposing] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [discipline, setDiscipline] = useState(() => searchParams.get('discipline') || '')
+  const [transmittalPrefix, setTransmittalPrefix] = useState(() => searchParams.get('transmittal') || '')
+  const [sortBy, setSortBy] = useState(() => searchParams.get('sort') || (kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_date'))
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => searchParams.get('order') === 'asc' ? 'asc' : 'desc')
   const [selected, setSelected] = useState<Package | null>(null)
   const [editing, setEditing] = useState<Package | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [filters, setFilters] = useState<FilterRule[]>([])
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(200)
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1))
+  const [pageSize, setPageSize] = useState(() => [50, 100, 200].includes(Number(searchParams.get('size'))) ? Number(searchParams.get('size')) : 200)
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    try { return localStorage.getItem('docflow-density') === 'compact' ? 'compact' : 'comfortable' } catch { return 'comfortable' }
+  })
   const [highlightedPackageId, setHighlightedPackageId] = useState<number | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false)
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const bulkMenuRef = useDismissableLayer<HTMLDivElement>(bulkMenuOpen, () => setBulkMenuOpen(false))
   const queryClient = useQueryClient()
   const focusPackageQuery = useQuery({ queryKey: ['package-focus', focusPackageId], queryFn: () => packagesApi.get(focusPackageId!), enabled: !!focusPackageId, retry: false })
@@ -194,6 +202,34 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const titlePeriod = period === 'week' ? 'This week' : period === 'month' ? 'This month' : period === 'year' ? 'This year' : 'All records'
   const totalPages = Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))
   useEffect(() => {
+    if (isComposing) return
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, isComposing])
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.isComposing) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onShortcut)
+    return () => window.removeEventListener('keydown', onShortcut)
+  }, [])
+  useEffect(() => {
+    const next = new URLSearchParams(location.search)
+    const assign = (key: string, value: string, fallback = '') => value && value !== fallback ? next.set(key, value) : next.delete(key)
+    assign('q', search)
+    assign('discipline', discipline)
+    assign('transmittal', kind === 'transmittal' ? transmittalPrefix : '')
+    assign('sort', sortBy, kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_date')
+    assign('order', sortOrder, 'desc')
+    assign('page', String(page), '1')
+    assign('size', String(pageSize), '200')
+    const nextValue = next.toString()
+    if (nextValue !== searchParams.toString()) setSearchParams(next, { replace: true })
+  }, [discipline, kind, location.search, page, pageSize, search, searchParams, setSearchParams, sortBy, sortOrder, transmittalPrefix])
+  useEffect(() => {
     setSortBy(kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_date')
     setSortOrder('desc')
     setTransmittalPrefix('')
@@ -204,12 +240,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     setEditorOpen(false)
     setBulkEditorOpen(false)
     setBulkMenuOpen(false)
+    setBulkDeleteOpen(false)
   }, [kind, selectedProject])
   useEffect(() => setPage(1), [period, selectedProject, search, discipline, transmittalPrefix, sortBy, sortOrder, pageSize])
   useEffect(() => { if (query.data && page > totalPages) setPage(totalPages) }, [query.data, page, totalPages])
   useEffect(() => {
     if (!focusValue && !focusPackageId) return
     setSearch(focusSearchValue)
+    setSearchInput(focusSearchValue)
     setDiscipline('')
     setTransmittalPrefix('')
     setFilters([])
@@ -299,9 +337,26 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   }
   const confirmBulkDelete = () => {
     if (!selectedItems.length) return
-    if (!window.confirm(`Permanently delete ${selectedItems.length} selected document${selectedItems.length === 1 ? '' : 's'}? This cannot be undone.`)) return
-    bulkDelete.mutate(selectedItems.map((item) => item.id))
+    setBulkDeleteOpen(true)
   }
+  const updateSearchInput = (value: string) => {
+    setSearchInput(value)
+    if (focusValue || focusPackageId) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('focus'); next.delete('package'); next.delete('notification')
+      setSearchParams(next, { replace: true })
+    }
+  }
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearch('')
+    searchInputRef.current?.focus()
+  }
+  const toggleDensity = () => setDensity((value) => {
+    const next = value === 'comfortable' ? 'compact' : 'comfortable'
+    try { localStorage.setItem('docflow-density', next) } catch { /* Preference remains session-only. */ }
+    return next
+  })
   return (
     <>
       <div className="page-header">
@@ -327,14 +382,24 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           {canWrite && <button className="primary-button" onClick={() => { setEditing(null); setEditorOpen(true) }}><Plus size={17} /> New document</button>}
         </div>
       </div>
-      <section className="data-card">
+      <section className={`data-card density-${density}`}>
         <div className="table-toolbar">
           <div className="search-box">
             <Search size={17} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search documents, workflows, people…" />
+            <input
+              ref={searchInputRef}
+              value={searchInput}
+              onChange={(e) => updateSearchInput(e.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              placeholder="Search documents, workflows, people…"
+              aria-label="Search document register"
+            />
+            {searchInput && <button type="button" className="search-clear" onClick={clearSearch} aria-label="Clear search"><X size={15} /></button>}
             <kbd>⌘ K</kbd>
           </div>
           <div className="toolbar-filters">
+            <button type="button" className="icon-button bordered density-toggle" onClick={toggleDensity} aria-label={`Use ${density === 'comfortable' ? 'compact' : 'comfortable'} table density`} aria-pressed={density === 'compact'}><AlignJustify size={16} /></button>
             {kind === 'transmittal' && (
               <label className={`transmittal-prefix-filter ${transmittalPrefix ? 'active' : ''}`}>
                 <Filter size={16} />
@@ -447,7 +512,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             onDuplicate={(item) => duplicate.mutate(item)}
             onToggleAbandoned={(item) => quickUpdate.mutate({ id: item.id, data: { is_abandoned: !item.is_abandoned } })}
             onToggleTerminate={(item) => quickUpdate.mutate({ id: item.id, data: { workflow_terminated: !item.workflow_terminated } })}
-            onDelete={(item) => remove.mutate(item)}
+            onDelete={(item) => remove.mutateAsync(item)}
           />
         )}
         {!!visibleItems.length && (
@@ -485,6 +550,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         saving={bulkUpdate.isPending}
         onClose={() => setBulkEditorOpen(false)}
         onSave={(patch) => bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch })}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={`Permanently delete ${selectedItems.length} document${selectedItems.length === 1 ? '' : 's'}?`}
+        description={<>This removes the selected records and their register history from DocFlow. <strong>This action cannot be undone.</strong></>}
+        confirmLabel={`Delete ${selectedItems.length} document${selectedItems.length === 1 ? '' : 's'}`}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={() => bulkDelete.mutateAsync(selectedItems.map((item) => item.id))}
       />
     </>
   )

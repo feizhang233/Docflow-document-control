@@ -1,0 +1,21 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["frontend/src"],
+  "locale": "en-GB",
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": ["Table Selection", "Select/Listbox", "Date", "Form", "Scrollbar", "Toast", "CRUD"],
+  "ownership": {
+    "Select/Listbox": "native",
+    "Date": "native"
+  },
+  "requiredCommands": ["lint", "build", "backend-tests"],
+  "commands": {
+    "lint": "cd frontend && npm run lint",
+    "build": "cd frontend && npm run build",
+    "backend-tests": "cd backend && .venv/bin/pytest -q"
+  },
+  "evidence": {
+    "crudFullFlow": "UX-CONTRACT.md",
+    "failurePaths": "UX-CONTRACT.md"
+  }
+}

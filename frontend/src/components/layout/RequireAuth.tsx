@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react'
 import { LoaderCircle, ShieldCheck } from 'lucide-react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { getApiError } from '../../lib/api'
+import { SecretInput } from '../common/SecretInput'
 import { useAuth } from '../../hooks/useAuth'
 
 export function RequireAuth() {
@@ -42,7 +43,7 @@ export function RequireAuth() {
       {user.must_change_password && (
         <div className="modal-layer password-gate">
           <div className="modal-backdrop" />
-          <form className="editor-modal password-gate-card" onSubmit={submit}>
+          <form className="editor-modal password-gate-card" onSubmit={submit} noValidate>
             <header>
               <div>
                 <span className="eyebrow">Security</span>
@@ -53,9 +54,9 @@ export function RequireAuth() {
             <div className="editor-body">
               <p className="password-gate-copy">Your account requires a new password before you can use DocFlow.</p>
               <div className="form-grid">
-                <label className="span-2"><span>Current password</span><input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label>
-                <label><span>New password</span><input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} required /></label>
-                <label><span>Confirm new password</span><input type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} minLength={10} required /></label>
+                <label className="span-2"><span>Current password</span><SecretInput autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required revealLabel="current password" /></label>
+                <label><span>New password</span><SecretInput autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={10} required revealLabel="new password" /></label>
+                <label><span>Confirm new password</span><SecretInput autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} minLength={10} required revealLabel="password confirmation" /></label>
               </div>
               {error && <div className="login-error" role="alert">{error}</div>}
             </div>

@@ -9,6 +9,7 @@ import { ProgressTrack } from '../common/ProgressTrack'
 import { StatusBadge } from '../common/StatusBadge'
 import { SyncedHorizontalScroll } from '../common/SyncedHorizontalScroll'
 import { FeedbackStatus } from './FeedbackStatus'
+import { ConfirmDialog } from '../common/ConfirmDialog'
 interface Props {
   items: Package[]
   highlightedPackageId: number | null
@@ -34,7 +35,7 @@ interface Props {
   onDuplicate: (item: Package) => void
   onToggleAbandoned: (item: Package) => void
   onToggleTerminate: (item: Package) => void
-  onDelete: (item: Package) => void
+  onDelete: (item: Package) => void | Promise<unknown>
   canWrite?: boolean
   canDelete?: boolean
 }
@@ -77,7 +78,11 @@ function Header({
     window.addEventListener('pointerup', end, { once: true })
   }
   return (
-    <th style={styleFor(config)}>
+    <th
+      scope="col"
+      style={styleFor(config)}
+      aria-sort={field && sortBy === field ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+    >
       {field ? (
         <button className="sort-button" onClick={() => onSort(field)}>
           {label}
@@ -104,11 +109,12 @@ function RowMenu({
   onDuplicate: (item: Package) => void
   onToggleAbandoned: (item: Package) => void
   onToggleTerminate: (item: Package) => void
-  onDelete: (item: Package) => void
+  onDelete: (item: Package) => void | Promise<unknown>
   canWrite?: boolean
   canDelete?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -158,6 +164,7 @@ function RowMenu({
   }, [menuOpen])
 
   return (
+    <>
     <div className="row-menu">
       <button
         ref={buttonRef}
@@ -196,7 +203,7 @@ function RowMenu({
             className="danger"
             onClick={() => {
               setMenuOpen(false)
-              if (window.confirm(`Permanently delete ${item.document_number}? This cannot be undone.`)) onDelete(item)
+              setDeleteOpen(true)
             }}
           >
             <Trash2 />Delete document
@@ -205,12 +212,21 @@ function RowMenu({
         document.body,
       )}
     </div>
+    <ConfirmDialog
+      open={deleteOpen}
+      title={`Permanently delete ${item.document_number}?`}
+      description={<>This removes the document from its register and related DocFlow views. <strong>This action cannot be undone.</strong></>}
+      confirmLabel="Delete document"
+      onClose={() => setDeleteOpen(false)}
+      onConfirm={() => onDelete(item)}
+    />
+    </>
   )
 }
 
 function SortableRow({
   item, highlighted, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
-  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, canWrite = true, canDelete = true,
+  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, onKeyboardMove, canWrite = true, canDelete = true,
 }: {
   item: Package
   highlighted: boolean
@@ -231,9 +247,11 @@ function SortableRow({
   onToggleAbandoned: Props['onToggleAbandoned']
   onToggleTerminate: Props['onToggleTerminate']
   onDelete: Props['onDelete']
+  onKeyboardMove?: (id: number, direction: -1 | 1) => void
   canWrite?: boolean
   canDelete?: boolean
 }) {
+  const [reorderHint, setReorderHint] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canWrite })
   const style = { transform: CSS.Transform.toString(transform), transition }
   const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_number'
@@ -259,7 +277,23 @@ function SortableRow({
           </label>
         </td>
       ) : (
-        <td className="drag-cell">{canWrite ? <button {...attributes} {...listeners} aria-label="Drag to reorder"><GripVertical size={16} /></button> : null}</td>
+        <td className="drag-cell">
+          {canWrite ? (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              aria-label="Drag to reorder. Use Alt and arrow keys for keyboard reordering."
+              onClick={() => setReorderHint(true)}
+              onKeyDown={(event) => {
+                if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+                event.preventDefault()
+                onKeyboardMove?.(item.id, event.key === 'ArrowUp' ? -1 : 1)
+              }}
+            ><GripVertical size={16} /></button>
+          ) : null}
+          {reorderHint && <span className="sr-only" role="status">Use Alt with the up or down arrow key to move this row.</span>}
+        </td>
       )}
       {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
       {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
@@ -303,6 +337,14 @@ export function PackageTable({
     next.splice(to, 0, next.splice(from, 1)[0])
     onReorder(next)
   }
+  const keyboardMove = (id: number, direction: -1 | 1) => {
+    const from = ids.indexOf(id)
+    const to = from + direction
+    if (from < 0 || to < 0 || to >= ids.length) return
+    const next = [...ids]
+    ;[next[from], next[to]] = [next[to], next[from]]
+    onReorder(next)
+  }
   const primary = kind === 'workflow' ? ['Workflow Number', 'workflow_number'] : kind === 'transmittal' ? ['Transmittal Number', 'transmittal_number'] : ['Document Number', 'document_number']
   const primaryField = primary[1] as ColumnField
   const config = (field: ColumnField) => layoutConfigs.find((item) => item.field_name === field)
@@ -328,10 +370,11 @@ export function PackageTable({
     >
       <DndContext sensors={sensors} onDragEnd={dragEnd}>
         <table className="package-table configurable-table" style={{ width: configuredWidth, minWidth: '100%' }}>
+          <caption className="sr-only">Document register</caption>
           <thead>
             <tr>
               {selectionMode ? (
-                <th className="select-cell">
+                <th className="select-cell" scope="col">
                   <label className="row-checkbox">
                     <input
                       type="checkbox"
@@ -344,7 +387,7 @@ export function PackageTable({
                   </label>
                 </th>
               ) : (
-                <th className="drag-cell" />
+                <th className="drag-cell" scope="col"><span className="sr-only">Reorder</span></th>
               )}
               {shown(primaryField) && <Header label={label(primaryField, primary[0])} field={primaryField} config={config(primaryField)} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {kind !== 'documents' && shown('document_number') && <Header label={label('document_number', 'Document Number')} field="document_number" config={config('document_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
@@ -358,7 +401,7 @@ export function PackageTable({
               {primaryField !== 'workflow_number' && shown('workflow_number') && <Header label={label('workflow_number', 'Workflow No.')} field="workflow_number" config={config('workflow_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('submission_progress') && <Header label={label('submission_progress', 'Submission Progress')} config={config('submission_progress')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('feedback') && <Header label={label('feedback', 'Feedback')} config={config('feedback')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              <th />
+              <th scope="col"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -370,6 +413,7 @@ export function PackageTable({
                   selectionMode={selectionMode}
                   selected={!!selectedIds?.has(item.id)}
                   onToggleSelect={onToggleSelect}
+                  onKeyboardMove={keyboardMove}
                   {...{ item, kind, configs: layoutConfigs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, canWrite, canDelete }}
                 />
               ))}

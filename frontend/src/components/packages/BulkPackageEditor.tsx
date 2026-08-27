@@ -45,6 +45,7 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
   const [workflowTerminated, setWorkflowTerminated] = useState<'keep' | 'yes' | 'no'>('keep')
   const [updateSubmissionProgress, setUpdateSubmissionProgress] = useState(false)
   const [submissionStage, setSubmissionStage] = useState(0)
+  const [validationError, setValidationError] = useState('')
 
   const configMap = useMemo(
     () => Object.fromEntries(configs.map((c) => [c.field_name, c])) as Partial<Record<BulkField, ColumnConfig>>,
@@ -63,6 +64,7 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
     setWorkflowTerminated('keep')
     setUpdateSubmissionProgress(false)
     setSubmissionStage(0)
+    setValidationError('')
   }, [open, items])
 
   if (!open) return null
@@ -75,7 +77,7 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
     if (numberOfDocuments.trim()) {
       const value = Number(numberOfDocuments)
       if (!Number.isInteger(value) || value < 1) {
-        window.alert('Number of documents must be a positive integer')
+        setValidationError('Number of documents must be a positive integer.')
         return null
       }
       patch.number_of_documents = value
@@ -88,9 +90,10 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
       patch.submission_progress = Object.fromEntries(steps.map((step, index) => [step, index < submissionStage]))
     }
     if (!Object.keys(patch).length) {
-      window.alert('Choose at least one field to update')
+      setValidationError('Choose at least one field to update before applying changes.')
       return null
     }
+    setValidationError('')
     return patch
   }
 
@@ -115,6 +118,7 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
       <div className="modal-backdrop" onClick={onClose} />
       <form
         className="editor-modal bulk-editor-modal"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault()
           const patch = buildPatch()
@@ -134,6 +138,7 @@ export function BulkPackageEditor({ items, configs, workflowConfig, open, saving
             <div>{items.map((item) => item.document_number).join(', ')}</div>
             <p>Only filled fields are applied. Leave a field blank to keep each document’s current value.</p>
           </div>
+          <div className="form-message-slot">{validationError && <div className="form-error-banner" role="alert">{validationError}</div>}</div>
           <div className="form-grid">
             {bulkFields.map((field) => {
               const config = configMap[field.name]
