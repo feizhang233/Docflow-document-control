@@ -242,6 +242,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     setBulkMenuOpen(false)
     setBulkDeleteOpen(false)
   }, [kind, selectedProject])
+  useEffect(() => {
+    setEditorOpen(false)
+    setBulkEditorOpen(false)
+  }, [period])
   useEffect(() => setPage(1), [period, selectedProject, search, discipline, transmittalPrefix, sortBy, sortOrder, pageSize])
   useEffect(() => { if (query.data && page > totalPages) setPage(totalPages) }, [query.data, page, totalPages])
   useEffect(() => {
@@ -357,6 +361,30 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     try { localStorage.setItem('docflow-density', next) } catch { /* Preference remains session-only. */ }
     return next
   })
+  if (editorOpen) {
+    return (
+      <PackageEditor
+        item={editing}
+        configs={configs.data || []}
+        workflowConfig={workflowConfig}
+        saving={save.isPending}
+        onClose={() => setEditorOpen(false)}
+        onSave={(data) => save.mutate(data)}
+      />
+    )
+  }
+  if (bulkEditorOpen) {
+    return (
+      <BulkPackageEditor
+        items={selectedItems}
+        configs={configs.data || []}
+        workflowConfig={workflowConfig}
+        saving={bulkUpdate.isPending}
+        onClose={() => setBulkEditorOpen(false)}
+        onSave={(patch) => bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch })}
+      />
+    )
+  }
   return (
     <>
       <div className="page-header">
@@ -379,7 +407,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             {selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}
             {selectionMode ? 'Cancel select' : 'Select'}
           </button>}
-          {canWrite && <button className="primary-button" onClick={() => { setEditing(null); setEditorOpen(true) }}><Plus size={17} /> New document</button>}
+          {canWrite && <button className="primary-button" onClick={() => { setSelected(null); setEditing(null); setEditorOpen(true) }}><Plus size={17} /> New document</button>}
         </div>
       </div>
       <section className={`data-card density-${density}`}>
@@ -432,7 +460,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
               <button
                 className="secondary-button"
                 disabled={!selectedIds.size || bulkUpdate.isPending}
-                onClick={() => setBulkEditorOpen(true)}
+                onClick={() => { setSelected(null); setBulkEditorOpen(true) }}
               >
                 <Pencil size={15} /> Edit together
               </button>
@@ -500,7 +528,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
               else { setSortBy(key); setSortOrder('asc') }
             }}
             onView={setSelected}
-            onEdit={(item) => { setEditing(item); setEditorOpen(true) }}
+            onEdit={(item) => { setSelected(null); setEditing(item); setEditorOpen(true) }}
             canWrite={canWrite}
             canDelete={canDelete}
             onColumnResize={(field, width) => {
@@ -541,16 +569,6 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         )}
       </section>
       <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!canWrite} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
-      <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} />
-      <BulkPackageEditor
-        items={selectedItems}
-        configs={configs.data || []}
-        workflowConfig={workflowConfig}
-        open={bulkEditorOpen}
-        saving={bulkUpdate.isPending}
-        onClose={() => setBulkEditorOpen(false)}
-        onSave={(patch) => bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch })}
-      />
       <ConfirmDialog
         open={bulkDeleteOpen}
         title={`Permanently delete ${selectedItems.length} document${selectedItems.length === 1 ? '' : 's'}?`}
