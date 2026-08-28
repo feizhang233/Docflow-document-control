@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, LoaderCircle, Save } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { LoaderCircle, Save, X } from 'lucide-react'
 import type { ColumnConfig, InputColumnField, Package, PackageInput, WorkflowConfig } from '../../types/package'
+import { ModalLayer } from '../common/ModalLayer'
 import { columnOptionsFor, submissionStepsFor } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 
@@ -25,12 +26,13 @@ interface Props {
   items: Package[]
   configs: ColumnConfig[]
   workflowConfig: WorkflowConfig
+  open: boolean
   saving: boolean
   onClose: () => void
   onSave: (patch: BulkPackagePatch) => void
 }
 
-export function BulkPackageEditor({ items, configs, workflowConfig, saving, onClose, onSave }: Props) {
+export function BulkPackageEditor({ items, configs, workflowConfig, open, saving, onClose, onSave }: Props) {
   const stepSets = Array.from(new Set(items.map((item) => submissionStepsFor(workflowConfig, item.project_code).join('\u0001'))))
   const sharedSteps = stepSets.length === 1 ? submissionStepsFor(workflowConfig, items[0]?.project_code) : null
   const steps = sharedSteps || workflowConfig.submission_steps
@@ -45,13 +47,6 @@ export function BulkPackageEditor({ items, configs, workflowConfig, saving, onCl
   const [updateSubmissionProgress, setUpdateSubmissionProgress] = useState(false)
   const [submissionStage, setSubmissionStage] = useState(0)
   const [validationError, setValidationError] = useState('')
-  const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
-  useEffect(() => {
-    const previous = document.title
-    document.title = `Edit ${items.length} document${items.length === 1 ? '' : 's'} — DocFlow`
-    return () => { document.title = previous }
-  }, [items.length])
 
   const configMap = useMemo(
     () => Object.fromEntries(configs.map((c) => [c.field_name, c])) as Partial<Record<BulkField, ColumnConfig>>,
@@ -59,16 +54,21 @@ export function BulkPackageEditor({ items, configs, workflowConfig, saving, onCl
   )
 
   useEffect(() => {
-    window.scrollTo(0, 0)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        onCloseRef.current()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
+    if (!open) return
+    setDocumentType('')
+    setInitiator('')
+    setDiscipline('')
+    setNumberOfDocuments('')
+    setNotes('')
+    setHasAttachment('keep')
+    setIsAbandoned('keep')
+    setWorkflowTerminated('keep')
+    setUpdateSubmissionProgress(false)
+    setSubmissionStage(0)
+    setValidationError('')
+  }, [open, items])
+
+  if (!open) return null
 
   const buildPatch = (): BulkPackagePatch | null => {
     const patch: BulkPackagePatch = {}
@@ -115,34 +115,28 @@ export function BulkPackageEditor({ items, configs, workflowConfig, saving, onCl
   }
 
   return (
-    <form
-      className="editor-page"
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault()
-        const patch = buildPatch()
-        if (patch) onSave(patch)
-      }}
-    >
-      <div className="page-header">
-        <div>
-          <div className="breadcrumb">Document Control <span>/</span> Bulk edit</div>
-          <h1>Edit {items.length} document{items.length === 1 ? '' : 's'}</h1>
-          <p>Only filled fields are applied. Leave a field blank to keep each document’s current value.</p>
-        </div>
-        <div className="header-actions">
-          <button type="button" className="secondary-button" onClick={onClose}><ChevronLeft size={16} /> Back to register</button>
-          <button type="submit" className="primary-button" disabled={saving}>
-            {saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}
-            {saving ? 'Saving…' : `Apply to ${items.length} document${items.length === 1 ? '' : 's'}`}
-          </button>
-        </div>
-      </div>
-      <section className="data-card editor-card">
+    <ModalLayer open={open} onClose={onClose} label={`Edit ${items.length} document${items.length === 1 ? '' : 's'}`}>
+      <form
+        className="editor-modal bulk-editor-modal"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          const patch = buildPatch()
+          if (patch) onSave(patch)
+        }}
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Bulk edit</span>
+            <h2>Edit {items.length} document{items.length === 1 ? '' : 's'}</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
+        </header>
         <div className="editor-body">
           <div className="bulk-selected-list">
             <strong>Selected documents</strong>
             <div>{items.map((item) => item.document_number).join(', ')}</div>
+            <p>Only filled fields are applied. Leave a field blank to keep each document’s current value.</p>
           </div>
           <div className="form-message-slot">{validationError && <div className="form-error-banner" role="alert">{validationError}</div>}</div>
           <div className="form-grid">
@@ -227,7 +221,14 @@ export function BulkPackageEditor({ items, configs, workflowConfig, saving, onCl
             </label>
           </div>
         </div>
-      </section>
-    </form>
+        <footer>
+          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
+          <button type="submit" className="primary-button" disabled={saving}>
+            {saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}
+            {saving ? 'Saving…' : `Apply to ${items.length} document${items.length === 1 ? '' : 's'}`}
+          </button>
+        </footer>
+      </form>
+    </ModalLayer>
   )
 }

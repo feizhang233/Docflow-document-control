@@ -40,7 +40,7 @@ Workflow numbering, Workflow comments/state, Aconex matching, and external workf
 | Table Selection | `PackageTable` + `PackagesPage` selection bar | this contract | page only | keyboard + browser |
 | Select/Listbox | native `<select>` | this contract + DESIGN | native | keyboard + open popup |
 | Date | native date input | API date-only schema | native | locale + browser |
-| Form | shared `.form-grid` + in-page editor canvas + per-form validation | this contract | create / edit / bulk | validation browser flow |
+| Form | shared `.form-grid`/modal shell + per-form validation | this contract | create / edit / bulk | validation browser flow |
 | Scrollbar | global application stylesheet | DESIGN | stable-gutter exceptions | computed style |
 | Toast | Sonner provider | this contract | success / error | live-region/browser |
 | CRUD | package API hooks + editor/drawer/table | API + this contract | stay in register | full-flow browser |
@@ -93,7 +93,7 @@ Workflow numbering, Workflow comments/state, Aconex matching, and external workf
 
 ## Overlays and feedback
 
-- Dialog primitive: shared `ConfirmDialog` for destructive confirmation. Document create, edit, and bulk edit occupy the register content canvas as in-page forms, not overlay dialogs.
+- Dialog primitive: shared `ConfirmDialog` for destructive confirmation; document create/edit/bulk use the editor modal shell portaled to the viewport so the dimmed backdrop covers the whole page, not only the register table.
 - Destructive confirmation levels: abandonment/termination are warning operations; API deletion is irreversible danger.
 - Toast placement/duration/deduplication: one Sonner viewport, top-right, routine auto-dismiss, error persists long enough to read.
 - Alert/banner scope and persistence: field/form errors inline; route/data failures use persistent state panels.

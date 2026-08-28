@@ -559,26 +559,12 @@ button:not(:disabled), a[href], select:not(:disabled), input[type='checkbox']:no
 .form-grid input:focus, .form-grid select:focus, .project-choice select:focus, .bulk-toggle-grid select:focus, .import-review select:focus, .config-text-input:focus, .config-width:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 11%, transparent); outline: 0; }
 .form-message-slot { min-height: 40px; }
 .form-error-banner { padding: 9px 11px; font-size: 10px; }
-.editor-modal { position: relative; top: auto; left: auto; width: min(720px, 100%); max-height: min(90svh, 860px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-muted); box-shadow: var(--shadow-float); transform: none; animation: overlayIn 240ms cubic-bezier(.22,1,.36,1) both; }
+.editor-modal { position: relative; top: auto; left: auto; width: min(720px, 100%); max-height: min(90svh, 860px); overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-muted); box-shadow: var(--shadow-float); transform: none; animation: overlayIn 240ms cubic-bezier(.22,1,.36,1) both; }
 .editor-modal>header { height: 78px; color: var(--color-text); border-bottom-color: var(--color-border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--color-surface); }
 .editor-modal h2, .detail-drawer h2 { color: var(--color-ink); font-family: var(--font-display); }
 .editor-body { background: var(--color-surface-muted); scrollbar-gutter: stable; }
 .editor-modal>footer { position: sticky; bottom: 0; min-height: 66px; color: var(--color-text); border-top-color: var(--color-border); border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: color-mix(in srgb, var(--color-surface) 94%, transparent); backdrop-filter: blur(14px); }
-.modal-layer { z-index: var(--z-dialog); display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
-.editor-page .editor-card { overflow: visible; }
-.editor-page .editor-body { padding: 22px 24px 28px; background: var(--color-surface); }
-.editor-page .form-grid { gap: 16px 18px; }
-.editor-page .editor-sections { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
-.editor-page .editor-sections fieldset,
-.editor-page .bulk-progress-section {
-  margin: 18px 0 0;
-  padding: 16px 18px 18px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-surface-muted);
-}
-.editor-page .editor-sections fieldset { margin: 0; }
-.editor-page legend { font-size: 11px; font-weight: 700; color: var(--color-ink); padding: 0 4px; }
+.modal-layer { position: fixed; inset: 0; z-index: var(--z-dialog); display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 .drawer-layer { z-index: var(--z-sheet); }
 .modal-backdrop, .drawer-backdrop { background: rgba(10,15,25,.5); backdrop-filter: blur(4px); animation: backdropIn 180ms ease-out both; }
 .detail-drawer { color: var(--color-text); border-left: 1px solid var(--color-border); background: var(--color-surface-muted); box-shadow: var(--shadow-float); animation: drawerIn 260ms cubic-bezier(.22,1,.36,1) both; }
@@ -656,7 +642,6 @@ html[data-theme='dark'] .table-footer,
 html[data-theme='dark'] .editor-body,
 html[data-theme='dark'] .config-note,
 html[data-theme='dark'] .config-table-head { background-color: var(--color-surface-muted); }
-html[data-theme='dark'] .editor-page .editor-body { background-color: var(--color-surface); }
 html[data-theme='dark'] input,
 html[data-theme='dark'] select,
 html[data-theme='dark'] textarea { color: var(--color-ink); border-color: var(--color-border-strong); background-color: var(--color-surface); }

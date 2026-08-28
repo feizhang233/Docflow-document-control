@@ -361,30 +361,6 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     try { localStorage.setItem('docflow-density', next) } catch { /* Preference remains session-only. */ }
     return next
   })
-  if (editorOpen) {
-    return (
-      <PackageEditor
-        item={editing}
-        configs={configs.data || []}
-        workflowConfig={workflowConfig}
-        saving={save.isPending}
-        onClose={() => setEditorOpen(false)}
-        onSave={(data) => save.mutate(data)}
-      />
-    )
-  }
-  if (bulkEditorOpen) {
-    return (
-      <BulkPackageEditor
-        items={selectedItems}
-        configs={configs.data || []}
-        workflowConfig={workflowConfig}
-        saving={bulkUpdate.isPending}
-        onClose={() => setBulkEditorOpen(false)}
-        onSave={(patch) => bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch })}
-      />
-    )
-  }
   return (
     <>
       <div className="page-header">
@@ -569,6 +545,16 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         )}
       </section>
       <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!canWrite} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
+      <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} />
+      <BulkPackageEditor
+        items={selectedItems}
+        configs={configs.data || []}
+        workflowConfig={workflowConfig}
+        open={bulkEditorOpen}
+        saving={bulkUpdate.isPending}
+        onClose={() => setBulkEditorOpen(false)}
+        onSave={(patch) => bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch })}
+      />
       <ConfirmDialog
         open={bulkDeleteOpen}
         title={`Permanently delete ${selectedItems.length} document${selectedItems.length === 1 ? '' : 's'}?`}
