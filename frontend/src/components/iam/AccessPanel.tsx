@@ -53,7 +53,7 @@ export function AccessPanel() {
             <article key={user.id} className={`iam-user-card ${user.is_active ? '' : 'inactive'}`}>
               <div className="avatar">{initials(user.display_name)}</div>
               <div className="iam-user-identity">
-                <strong>{user.display_name}{user.id === currentUser?.id ? <em>You</em> : null}</strong>
+                <strong>{user.display_name}{user.id === currentUser?.id ? <em>You</em> : null}{user.password_locked ? <em className="iam-lock-pill">Password locked</em> : null}</strong>
                 <span>@{user.username}{user.email ? ` · ${user.email}` : ''}</span>
               </div>
               <div className="iam-user-meta">
@@ -67,7 +67,7 @@ export function AccessPanel() {
               {canWrite && (
                 <div className="iam-user-actions">
                   <button className="secondary-button" onClick={() => setEditing(user)}>Edit</button>
-                  <button className="secondary-button" onClick={() => setResetting(user)}><KeyRound size={14} /> Reset</button>
+                  {!user.password_locked && <button className="secondary-button" onClick={() => setResetting(user)}><KeyRound size={14} /> Reset</button>}
                 </div>
               )}
             </article>
@@ -76,7 +76,7 @@ export function AccessPanel() {
       )}
       <div className="config-note">
         <strong>Roles</strong>
-        <span>Administrator manages access. Document Controller owns the register and settings. Editor can update documents. Viewer is read-only.</span>
+        <span>Administrator manages access. Document Controller owns the register and settings. Editor can update documents. Viewer is read-only. The shared Guest account can view documents and cannot change its password.</span>
       </div>
       <div className="iam-audit">
         <div className="workflow-config-title">
@@ -153,6 +153,7 @@ function UserEditor({
     onError: (error) => toast.error(getApiError(error)),
   })
   const adminSelected = form.role_slugs.includes('admin')
+  const passwordLocked = Boolean(user?.password_locked)
   const pending = create.isPending || update.isPending
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -191,13 +192,14 @@ function UserEditor({
             <div className="iam-role-grid">
               {roles.map((role) => (
                 <label key={role.slug} className={`check-card ${form.role_slugs.includes(role.slug) ? 'selected' : ''}`}>
-                  <input type="checkbox" checked={form.role_slugs.includes(role.slug)} onChange={() => toggleRole(role.slug)} />
+                  <input type="checkbox" checked={form.role_slugs.includes(role.slug)} onChange={() => toggleRole(role.slug)} disabled={passwordLocked} />
                   <i />
                   <span><strong>{role.name}</strong><small>{role.description}</small></span>
                 </label>
               ))}
             </div>
           </fieldset>
+          {passwordLocked && <p className="password-gate-copy">This is the shared Guest account. It stays read-only, and its password cannot be changed.</p>}
           <fieldset>
             <legend>Projects</legend>
             <label className="editor-switch-row">

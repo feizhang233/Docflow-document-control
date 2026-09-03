@@ -83,7 +83,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const stepsForProject = (projectCode: string) => submissionStepsFor(workflowConfig, projectCode)
   const currentFeedbackReviewers = workflowConfig.feedback_reviewers
   const transmittalPrefixes = useMemo(() => prefixesForProject(workflowConfig.transmittal_prefixes, selectedProject, codes), [workflowConfig.transmittal_prefixes, selectedProject, codes])
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['packages'] })
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['packages'] })
+    queryClient.invalidateQueries({ queryKey: ['transmittal-numbers'] })
+  }
   const save = useMutation({
     mutationFn: (data: PackageInput) => (editing ? packagesApi.update(editing.id, data) : packagesApi.create(data)),
     onSuccess: () => { toast.success(editing ? 'Document updated' : 'Document created'); setEditorOpen(false); refresh() },
@@ -545,7 +548,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
         )}
       </section>
       <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!canWrite} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
-      <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} />
+      <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} defaultProject={selectedProject === 'ALL' ? undefined : selectedProject} />
       <BulkPackageEditor
         items={selectedItems}
         configs={configs.data || []}

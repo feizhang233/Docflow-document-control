@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type { AuditEventList, AuthUser, Permission, Role, UserCreateInput, UserList, UserUpdateInput } from '../types/iam'
-import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, WorkflowCommentList, WorkflowConfig } from '../types/package'
+import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, TransmittalSuggestions, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -59,6 +59,7 @@ interface ListParams {
 
 export const packagesApi = {
   list: async (params: ListParams) => (await client.get<PackageListResponse>('/packages', { params })).data,
+  transmittals: async (project_code: ProjectCode) => (await client.get<TransmittalSuggestions>('/packages/transmittals', { params: { project_code } })).data,
   get: async (id: number) => (await client.get<Package>(`/packages/${id}`)).data,
   listWorkflowComments: async (id: number) => (await client.get<WorkflowCommentList>(`/packages/${id}/workflow-comments`)).data,
   listAll: async (params: Omit<ListParams,'page'|'page_size'> = {}) => {

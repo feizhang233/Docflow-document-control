@@ -9,7 +9,17 @@ from jwt import InvalidTokenError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from app.core.config import settings
-from app.core.iam_catalog import ADMIN_ROLE_SLUG, MIN_PASSWORD_LENGTH, PERMISSIONS, ROLES, USERNAME_PATTERN
+from app.core.iam_catalog import (
+    ADMIN_ROLE_SLUG,
+    GUEST_DISPLAY_NAME,
+    GUEST_PASSWORD,
+    GUEST_ROLE_SLUG,
+    GUEST_USERNAME,
+    MIN_PASSWORD_LENGTH,
+    PERMISSIONS,
+    ROLES,
+    USERNAME_PATTERN,
+)
 from app.core.security import (
     access_token,
     decode_jwt,
@@ -34,6 +44,7 @@ def user_to_dict(user: User) -> dict:
         "display_name": user.display_name,
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,
+        "password_locked": user.password_locked,
         "all_projects": user.all_projects,
         "project_codes": [] if user.all_projects else [link.project_code for link in user.project_links],
         "roles": [
@@ -60,34 +71,65 @@ class IamService:
 
     def bootstrap(self) -> User | None:
         self.ensure_catalog()
-        if (self.db.scalar(select(func.count()).select_from(User)) or 0) > 0:
-            return None
-        username = (settings.bootstrap_admin_username or "admin").strip()
-        if not re.fullmatch(USERNAME_PATTERN, username):
-            username = "admin"
-        password = settings.bootstrap_admin_password
-        generated = False
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
-            password = secrets.token_urlsafe(18)
-            generated = True
-        email = settings.bootstrap_admin_email.strip().lower() or None
+        created_admin = None
+        if (self.db.scalar(select(func.count()).select_from(User)) or 0) == 0:
+            username = (settings.bootstrap_admin_username or "admin").strip()
+            if not re.fullmatch(USERNAME_PATTERN, username) or username == GUEST_USERNAME:
+                username = "admin"
+            password = settings.bootstrap_admin_password
+            generated = False
+            if not password or len(password) < MIN_PASSWORD_LENGTH:
+                password = secrets.token_urlsafe(18)
+                generated = True
+            email = settings.bootstrap_admin_email.strip().lower() or None
+            created_admin = self._create_user(
+                username=username,
+                display_name=(settings.bootstrap_admin_name or "Administrator").strip() or "Administrator",
+                email=email,
+                password=password,
+                role_slugs=[ADMIN_ROLE_SLUG],
+                all_projects=True,
+                project_codes=[],
+                must_change_password=True,
+            )
+            self.audit(None, "iam.bootstrap_admin", "user", str(created_admin.id), {"username": created_admin.username, "generated_password": generated}, None)
+            self.db.commit()
+            self.db.refresh(created_admin)
+            if generated:
+                print(f"DocFlow bootstrap admin created: username={created_admin.username} password={password}", flush=True)
+            else:
+                print(f"DocFlow bootstrap admin created: username={created_admin.username}", flush=True)
+        self.ensure_guest()
+        return created_admin
+
+    def ensure_guest(self) -> User:
+        existing = self.db.scalar(select(User).where(User.username == GUEST_USERNAME))
+        if existing:
+            changed = False
+            if not existing.password_locked:
+                existing.password_locked = True
+                changed = True
+            if existing.must_change_password:
+                existing.must_change_password = False
+                changed = True
+            if changed:
+                self.db.commit()
+            return existing
         user = self._create_user(
-            username=username,
-            display_name=(settings.bootstrap_admin_name or "Administrator").strip() or "Administrator",
-            email=email,
-            password=password,
-            role_slugs=[ADMIN_ROLE_SLUG],
+            username=GUEST_USERNAME,
+            display_name=GUEST_DISPLAY_NAME,
+            email=None,
+            password=GUEST_PASSWORD,
+            role_slugs=[GUEST_ROLE_SLUG],
             all_projects=True,
             project_codes=[],
-            must_change_password=True,
+            must_change_password=False,
+            password_locked=True,
         )
-        self.audit(None, "iam.bootstrap_admin", "user", str(user.id), {"username": user.username, "generated_password": generated}, None)
+        self.audit(None, "iam.bootstrap_guest", "user", str(user.id), {"username": user.username, "roles": [GUEST_ROLE_SLUG]}, None)
         self.db.commit()
         self.db.refresh(user)
-        if generated:
-            print(f"DocFlow bootstrap admin created: username={user.username} password={password}", flush=True)
-        else:
-            print(f"DocFlow bootstrap admin created: username={user.username}", flush=True)
+        print("DocFlow guest account ready: username=guest (read-only, password locked)", flush=True)
         return user
 
     def ensure_catalog(self) -> None:
@@ -182,6 +224,7 @@ class IamService:
         self.db.commit()
 
     def change_password(self, user: User, current_password: str, new_password: str, *, ip: str | None) -> None:
+        self._assert_password_mutable(user)
         if not verify_password(current_password, user.password_hash):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         if current_password == new_password:
@@ -241,6 +284,8 @@ class IamService:
                 self._revoke_all_sessions(user.id)
             user.is_active = values["is_active"]
         if "role_slugs" in values:
+            if user.username == GUEST_USERNAME and set(values["role_slugs"]) != {GUEST_ROLE_SLUG}:
+                raise HTTPException(status_code=400, detail="Guest account roles cannot be changed")
             if user.is_admin() and ADMIN_ROLE_SLUG not in values["role_slugs"]:
                 self._protect_last_admin(user)
             user.roles = self._roles_from_slugs(values["role_slugs"])
@@ -261,6 +306,7 @@ class IamService:
 
     def reset_password(self, user_id: int, password: str, must_change: bool, actor: User, *, ip: str | None) -> User:
         user = self.get_user(user_id)
+        self._assert_password_mutable(user)
         user.password_hash = hash_password(password)
         user.must_change_password = must_change
         user.failed_login_count = 0
@@ -294,7 +340,7 @@ class IamService:
             )
         )
 
-    def _create_user(self, *, username: str, display_name: str, email: str | None, password: str, role_slugs: list[str], all_projects: bool, project_codes: list[str], must_change_password: bool) -> User:
+    def _create_user(self, *, username: str, display_name: str, email: str | None, password: str, role_slugs: list[str], all_projects: bool, project_codes: list[str], must_change_password: bool, password_locked: bool = False) -> User:
         roles = self._roles_from_slugs(role_slugs)
         if any(role.slug == ADMIN_ROLE_SLUG for role in roles):
             all_projects = True
@@ -308,6 +354,7 @@ class IamService:
             password_hash=hash_password(password),
             is_active=True,
             must_change_password=must_change_password,
+            password_locked=password_locked,
             all_projects=all_projects,
         )
         user.roles = roles
@@ -346,6 +393,10 @@ class IamService:
                 query = query.where(User.id != exclude_id)
             if self.db.scalar(query):
                 raise HTTPException(status_code=409, detail="Email is already in use")
+
+    def _assert_password_mutable(self, user: User) -> None:
+        if user.password_locked:
+            raise HTTPException(status_code=400, detail="This account's password cannot be changed")
 
     def _protect_last_admin(self, user: User) -> None:
         if not user.is_admin():

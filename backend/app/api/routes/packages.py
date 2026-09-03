@@ -5,7 +5,7 @@ from app.core.auth import assert_project_access, project_scope, require_permissi
 from app.db.session import get_db
 from app.models.iam import User
 from app.repositories.package_repository import PackageRepository
-from app.schemas.package import PackageCreate, PackageList, PackageRead, PackageUpdate, ReorderRequest
+from app.schemas.package import PackageCreate, PackageList, PackageRead, PackageUpdate, ReorderRequest, TransmittalSuggestions
 from app.schemas.workflow_comment import WorkflowCommentList
 from app.services.package_service import PackageService
 from app.services.settings_service import SettingsService
@@ -26,6 +26,12 @@ def list_packages(period: Literal["week","month","year","all"]="week", project_c
         assert_project_access(user, project_code)
     items,total = PackageRepository(db).list(period=period,project_code=project_code,search=search,discipline=discipline,document_type=document_type,transmittal_prefix=transmittal_prefix,sort_by=sort_by,sort_order=sort_order,page=page,page_size=page_size,allowed_projects=allowed)
     return PackageList(items=items,total=total,page=page,page_size=page_size)
+
+@router.get("/transmittals", response_model=TransmittalSuggestions)
+def transmittal_suggestions(project_code: str = Query(..., min_length=2, max_length=16), db: Session = Depends(get_db), user: User = Depends(require_permission("packages:read"))):
+    project_code = SettingsService(db).require_project_code(project_code)
+    assert_project_access(user, project_code)
+    return PackageService(db).transmittal_suggestions(project_code, allowed_projects=project_scope(user))
 
 @router.get("/{package_id}", response_model=PackageRead)
 def get_package(package_id:int, db:Session=Depends(get_db), user: User=Depends(require_permission("packages:read"))):

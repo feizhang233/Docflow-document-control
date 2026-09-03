@@ -13,7 +13,7 @@ url = os.environ.get("DATABASE_URL")
 if not url:
     raise SystemExit("DATABASE_URL is required")
 
-engine = create_engine(url, pool_pre_ping=True)
+engine = create_engine(url, pool_pre_ping=True, connect_args={"connect_timeout": 3})
 last_error = None
 for attempt in range(1, 61):
     try:
@@ -26,6 +26,7 @@ for attempt in range(1, 61):
         time.sleep(1)
 else:
     raise SystemExit(f"database not ready: {last_error}")
+engine.dispose()
 PY
 
 alembic upgrade head

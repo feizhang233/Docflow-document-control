@@ -20,9 +20,22 @@ export function projectFilterFrom(value: string | null, codes: readonly string[]
   return canSeeAll || codes.length !== 1 ? 'ALL' : codes[0] || 'ALL'
 }
 
+export function transmittalTypeFor(documentType: string): 'PZI' | 'RFI' | 'RPT' {
+  return documentType === 'PZI' ? 'PZI' : documentType === 'RFI' ? 'RFI' : 'RPT'
+}
+
 export function transmittalPrefix(project: ProjectCode, documentType: string): string {
-  const type = documentType === 'PZI' ? 'PZI' : documentType === 'RFI' ? 'RFI' : 'RPT'
-  return `${project}-PCH-TRA-${type}-`
+  return `${project}-PCH-TRA-${transmittalTypeFor(documentType)}-`
+}
+
+export function findUsedTransmittal<T extends { package_id: number; transmittal_number: string }>(
+  value: string | null | undefined,
+  used: T[],
+  excludeId?: number | null,
+): T | undefined {
+  const needle = (value || '').trim().toLowerCase()
+  if (!needle) return undefined
+  return used.find((entry) => entry.package_id !== excludeId && entry.transmittal_number.trim().toLowerCase() === needle)
 }
 
 export function isAutomaticTransmittalNumber(value: string | null | undefined, codes: readonly string[] = projectCodesFrom(defaultProjects)): boolean {

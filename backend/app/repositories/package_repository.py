@@ -44,6 +44,21 @@ class PackageRepository:
         order = asc(field) if sort_order == "asc" else desc(field)
         items = list(self.db.scalars(query.order_by(order, Package.id).offset((page-1)*page_size).limit(page_size)))
         return items, count
+    def list_transmittals(self, *, project_code: str, allowed_projects: list[str] | None = None):
+        query = select(Package.id, Package.document_number, Package.transmittal_number).where(
+            Package.project_code == project_code,
+            Package.transmittal_number.is_not(None),
+            Package.transmittal_number != "",
+        )
+        if allowed_projects is not None:
+            if not allowed_projects:
+                return []
+            query = query.where(Package.project_code.in_(allowed_projects))
+        return [
+            {"package_id": package_id, "document_number": document_number, "transmittal_number": transmittal_number}
+            for package_id, document_number, transmittal_number in self.db.execute(query.order_by(Package.id)).all()
+            if transmittal_number
+        ]
     def get(self, package_id: int): return self.db.get(Package, package_id)
     def get_by_workflow_number(self, number: str): return self.db.scalars(select(Package).where(Package.workflow_number == number).order_by(Package.id)).first()
     def list_by_workflow_number(self, number: str) -> list[Package]:

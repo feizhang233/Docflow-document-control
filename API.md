@@ -20,6 +20,8 @@ BOOTSTRAP_ADMIN_NAME=Administrator
 
 The first backend start creates the bootstrap administrator if the users table is empty. That account must change its password at first sign-in.
 
+A shared read-only `guest` account is also created (password `1234567890`, Viewer role, all projects). It can view documents and notifications, has no Access (`iam:*`) permissions, and its password cannot be changed by the guest or by an administrator.
+
 Never commit a production key or place it in a query string.
 
 ### Session
@@ -32,9 +34,9 @@ Never commit a production key or place it in a query string.
 | `GET` | `/api/auth/me` | Current user, roles, permissions, and project scope |
 | `POST` | `/api/auth/change-password` | Change the signed-in user's password |
 
-Login body: `{ "username": "admin", "password": "…" }`. Change-password body: `{ "current_password": "…", "new_password": "…" }` (minimum 10 characters).
+Login body: `{ "username": "admin", "password": "…" }`. Change-password body: `{ "current_password": "…", "new_password": "…" }` (minimum 10 characters). Authenticated user payloads include `password_locked`.
 
-Responses: `200` authenticated payload, `401` invalid/expired session or credentials, `400` current password incorrect.
+Responses: `200` authenticated payload, `401` invalid/expired session or credentials, `400` current password incorrect or the account password is locked.
 
 ### Identity and access
 
@@ -51,7 +53,7 @@ Roles are system-defined: `admin`, `document_controller`, `editor`, `viewer`. Pe
 | `GET` | `/api/iam/permissions` | `iam:read` | List permission catalog |
 | `GET` | `/api/iam/audit` | `iam:read` | Recent access events (`limit`, `offset`) |
 
-Create-user body includes `username`, `display_name`, `password`, `role_slugs`, optional `email`, `all_projects`, and `project_codes`. The last active administrator cannot be demoted or disabled.
+Create-user body includes `username`, `display_name`, `password`, `role_slugs`, optional `email`, `all_projects`, and `project_codes`. The last active administrator cannot be demoted or disabled. The Guest account password cannot be reset, and its Viewer role cannot be changed.
 
 Internal document, settings, notification, and backup routes now require the matching permission. Missing authentication returns `401`; missing permission returns `403`. Project-scoped users receive `403` when they request another project.
 
@@ -255,6 +257,7 @@ The former Workflow Status field is removed. Feedback is now the workflow feedba
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/packages` | Search, filter, sort, and paginate documents |
+| `GET` | `/api/packages/transmittals` | Next transmittal in each PZI/RFI/RPT series for a project, plus used numbers |
 | `POST` | `/api/packages` | Create a document; blank Document Number becomes a unique `DRAFT-*` number |
 | `POST` | `/api/packages/{id}/duplicate` | Duplicate metadata using a unique `-COPY` Document Number |
 | `GET` | `/api/packages/{id}` | Read complete document metadata |
@@ -265,7 +268,9 @@ The former Workflow Status field is removed. Feedback is now the workflow feedba
 
 List parameters: `period=week|month|year|all`, `project_code=NFS|FST|FBP`, `search`, `discipline`, `document_type`, `transmittal_prefix`, `sort_by`, `sort_order`, `page`, and `page_size`. Omitting `project_code` returns all projects. `transmittal_prefix` performs a starts-with match against the Transmittal Number.
 
-Every package response includes `project_code`. New packages default to `NFS` when it is omitted; `FST` represents Fire Station and `FBP` represents Footbridge. Workflow Numbers remain shared and are not project-prefixed.
+Every package response includes `project_code`. New packages default to `NFS` when it is omitted; `FST` represents Fire Station and `FBP` represents Footbridge. Workflow Numbers remain shared and are not project-prefixed. Assigning a Workflow Number on update (empty to a value) without an explicit `submission_progress` payload completes every Submission Progress stage for that document's project.
+
+`GET /api/packages/transmittals?project_code=` returns `series` (PZI, RFI, and RPT prefixes with the latest issued number and the next suggested number) and `used` transmittal numbers for that project. Series are independent: if `NFS-PCH-TRA-RPT-465` exists, the RPT suggestion is `NFS-PCH-TRA-RPT-466` while PZI and RFI keep their own sequences. Duplicate transmittal numbers are allowed; the editor warns and can continue.
 
 Lifecycle fields accepted by create/update and included in metadata backups are `notes`, `has_attachment`, `is_abandoned`, and `workflow_terminated`. Setting `is_abandoned=true` greys both progress tracks in the UI without deleting their recorded steps.
 
@@ -293,3 +298,5 @@ CSV imports accept a JSON body with `rows` after the browser parses a selected C
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | API and database health check |
+
+Lost MySQL connections return `503` and reset the connection pool so the next request can reconnect.

@@ -52,6 +52,7 @@ class UserRead(BaseModel):
     display_name: str
     is_active: bool
     must_change_password: bool
+    password_locked: bool = False
     all_projects: bool
     project_codes: list[str] = []
     roles: list[RoleRead] = []

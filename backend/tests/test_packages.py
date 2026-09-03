@@ -2,6 +2,7 @@ from datetime import date
 
 from app.repositories.package_repository import period_bounds
 from app.schemas.package import FEEDBACK_STEPS, SUBMISSION_STEPS
+from app.services.transmittal import next_in_series, suggestions_for_project
 
 def test_calendar_period_bounds():
     assert period_bounds("week", date(2024, 1, 2)) == (date(2024, 1, 1), date(2024, 1, 8))
@@ -9,6 +10,20 @@ def test_calendar_period_bounds():
     assert period_bounds("month", date(2024, 2, 20)) == (date(2024, 2, 1), date(2024, 3, 1))
     assert period_bounds("month", date(2024, 12, 20)) == (date(2024, 12, 1), date(2025, 1, 1))
     assert period_bounds("year", date(2024, 7, 1)) == (date(2024, 1, 1), date(2025, 1, 1))
+
+def test_next_transmittal_uses_highest_number_per_series():
+    latest, nxt = next_in_series("NFS-PCH-TRA-RPT-", ["NFS-PCH-TRA-RPT-001", "NFS-PCH-TRA-RPT-465", "TR-001", "NFS-PCH-TRA-PZI-012"])
+    assert latest == "NFS-PCH-TRA-RPT-465"
+    assert nxt == "NFS-PCH-TRA-RPT-466"
+    empty_latest, empty_next = next_in_series("NFS-PCH-TRA-PZI-", ["NFS-PCH-TRA-RPT-465"])
+    assert empty_latest is None and empty_next == "NFS-PCH-TRA-PZI-001"
+    _, after_nine_nine_nine = next_in_series("NFS-PCH-TRA-RFI-", ["NFS-PCH-TRA-RFI-999"])
+    assert after_nine_nine_nine == "NFS-PCH-TRA-RFI-1000"
+    series = suggestions_for_project("NFS", ["NFS-PCH-TRA-RPT-465", "NFS-PCH-TRA-PZI-012"])
+    by_type = {entry["type"]: entry for entry in series}
+    assert by_type["RPT"]["next"] == "NFS-PCH-TRA-RPT-466"
+    assert by_type["PZI"]["next"] == "NFS-PCH-TRA-PZI-013"
+    assert by_type["RFI"]["next"] == "NFS-PCH-TRA-RFI-001"
 
 def payload(number="DOC-CIV-001"):
     return {"document_number":number,"document_title":"Foundation layout","document_date":"2026-07-11","document_type":"Drawing","initiator":"Ana Petrović","discipline":"Civil","number_of_documents":4,"transmittal_number":"TR-001","workflow_number":"WF-001","submission_progress":{s:False for s in SUBMISSION_STEPS},"feedback":{s:False for s in FEEDBACK_STEPS},"order_index":0}
@@ -109,6 +124,28 @@ def test_register_sorting_and_transmittal_prefix_filter(client):
     assert [item["workflow_number"] for item in workflows] == ["WF-001", "WF-002"]
     assert filtered["total"] == 1 and filtered["items"][0]["document_number"] == "DOC-OLDER"
 
+def test_transmittal_suggestions_are_per_project_and_document_type(client):
+    client.post("/api/packages", json=payload("NFS-RPT-465") | {"transmittal_number": "NFS-PCH-TRA-RPT-465"})
+    client.post("/api/packages", json=payload("NFS-PZI-012") | {"document_type": "PZI", "transmittal_number": "NFS-PCH-TRA-PZI-012"})
+    client.post("/api/packages", json=payload("FST-RPT-020") | {"project_code": "FST", "transmittal_number": "FST-PCH-TRA-RPT-020"})
+    nfs = client.get("/api/packages/transmittals", params={"project_code": "NFS"})
+    assert nfs.status_code == 200, nfs.text
+    nfs_body = nfs.json()
+    series = {entry["type"]: entry for entry in nfs_body["series"]}
+    assert series["RPT"]["latest"] == "NFS-PCH-TRA-RPT-465"
+    assert series["RPT"]["next"] == "NFS-PCH-TRA-RPT-466"
+    assert series["PZI"]["latest"] == "NFS-PCH-TRA-PZI-012"
+    assert series["PZI"]["next"] == "NFS-PCH-TRA-PZI-013"
+    assert series["RFI"]["latest"] is None
+    assert series["RFI"]["next"] == "NFS-PCH-TRA-RFI-001"
+    used = {entry["transmittal_number"] for entry in nfs_body["used"]}
+    assert used == {"NFS-PCH-TRA-RPT-465", "NFS-PCH-TRA-PZI-012"}
+    fst = client.get("/api/packages/transmittals", params={"project_code": "FST"}).json()
+    fst_series = {entry["type"]: entry for entry in fst["series"]}
+    assert fst_series["RPT"]["next"] == "FST-PCH-TRA-RPT-021"
+    unknown = client.get("/api/packages/transmittals", params={"project_code": "ZZZ"})
+    assert unknown.status_code == 422
+
 def test_duplicate_and_lifecycle_metadata(client):
     created=client.post("/api/packages",json=payload()).json()
     duplicate=client.post(f"/api/packages/{created['id']}/duplicate")
@@ -119,6 +156,56 @@ def test_duplicate_and_lifecycle_metadata(client):
     updated=client.patch(f"/api/packages/{created['id']}",json={"notes":"Stopped by client instruction.","has_attachment":True,"is_abandoned":True,"workflow_terminated":True})
     assert updated.status_code==200
     assert updated.json()["has_attachment"] is True and updated.json()["is_abandoned"] is True
+
+def test_assigning_workflow_number_completes_submission_progress(client):
+    data = payload("DOC-WF-AUTO")
+    data["workflow_number"] = None
+    created = client.post("/api/packages", json=data).json()
+    assert created["workflow_number"] is None
+    assert not any(created["submission_progress"].values())
+    updated = client.patch(f"/api/packages/{created['id']}", json={"workflow_number": "WF-009001"})
+    assert updated.status_code == 200
+    assert updated.json()["workflow_number"] == "WF-009001"
+    assert updated.json()["submission_progress"] == {step: True for step in SUBMISSION_STEPS}
+    notifications = client.get("/api/notifications").json()
+    assert any(item["notification_type"] == "submission_progress" for item in notifications["items"])
+
+def test_assigning_workflow_number_keeps_explicit_progress(client):
+    data = payload("DOC-WF-KEEP")
+    data["workflow_number"] = None
+    created = client.post("/api/packages", json=data).json()
+    progress = {step: False for step in SUBMISSION_STEPS}
+    progress[SUBMISSION_STEPS[0]] = True
+    updated = client.patch(
+        f"/api/packages/{created['id']}",
+        json={"workflow_number": "WF-009002", "submission_progress": progress},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["workflow_number"] == "WF-009002"
+    assert updated.json()["submission_progress"][SUBMISSION_STEPS[0]] is True
+    assert updated.json()["submission_progress"][SUBMISSION_STEPS[1]] is False
+
+def test_changing_existing_workflow_number_does_not_complete_progress(client):
+    created = client.post("/api/packages", json=payload("DOC-WF-CHANGE")).json()
+    assert created["workflow_number"] == "WF-001"
+    assert not any(created["submission_progress"].values())
+    updated = client.patch(f"/api/packages/{created['id']}", json={"workflow_number": "WF-009003"})
+    assert updated.status_code == 200
+    assert updated.json()["workflow_number"] == "WF-009003"
+    assert not any(updated.json()["submission_progress"].values())
+
+def test_assigning_workflow_number_completes_project_specific_steps(client):
+    current = client.get("/api/settings/workflow").json()
+    custom = client.put("/api/settings/workflow", json={
+        **{key: current[key] for key in ("submission_steps", "feedback_reviewers", "feedback_status_labels", "feedback_status_colors", "transmittal_prefixes")},
+        "project_submission_steps": {"FST": ["Site check", "Issue pack"]},
+    })
+    assert custom.status_code == 200
+    created = client.post("/api/packages", json=payload("FST-WF-AUTO") | {"project_code": "FST", "workflow_number": None}).json()
+    assert list(created["submission_progress"]) == ["Site check", "Issue pack"]
+    updated = client.patch(f"/api/packages/{created['id']}", json={"workflow_number": "WF-FST-1"})
+    assert updated.status_code == 200
+    assert updated.json()["submission_progress"] == {"Site check": True, "Issue pack": True}
 
 def test_column_config_and_metadata_backup(client):
     client.post("/api/packages", json=payload())

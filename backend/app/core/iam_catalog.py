@@ -52,5 +52,9 @@ ROLES: dict[str, dict] = {
 }
 
 ADMIN_ROLE_SLUG = "admin"
+GUEST_ROLE_SLUG = "viewer"
+GUEST_USERNAME = "guest"
+GUEST_PASSWORD = "1234567890"
+GUEST_DISPLAY_NAME = "Guest"
 USERNAME_PATTERN = r"^[A-Za-z0-9._-]{3,32}$"
 MIN_PASSWORD_LENGTH = 10

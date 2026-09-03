@@ -1,5 +1,5 @@
 from app.core.iam_catalog import MIN_PASSWORD_LENGTH
-from tests.helpers import ADMIN_USERNAME, login
+from tests.helpers import ADMIN_USERNAME, GUEST_PASSWORD, GUEST_USERNAME, login
 
 
 def test_unauthenticated_ui_routes_are_rejected(anon_client):
@@ -83,6 +83,9 @@ def test_project_scope_hides_other_projects(client, anon_client):
     assert visible["total"] == 1
     assert visible["items"][0]["project_code"] == "FST"
     assert anon_client.get("/api/packages", params={"period": "all", "project_code": "NFS"}).status_code == 403
+    assert anon_client.get("/api/packages/transmittals", params={"project_code": "NFS"}).status_code == 403
+    fst_transmittals = anon_client.get("/api/packages/transmittals", params={"project_code": "FST"})
+    assert fst_transmittals.status_code == 200, fst_transmittals.text
     projects = anon_client.get("/api/settings/projects").json()["projects"]
     assert [item["code"] for item in projects] == ["FST"]
     blocked = anon_client.post("/api/packages", json=payload("NFS-DOC-002"))
@@ -119,6 +122,53 @@ def test_password_change_and_reset(client, anon_client):
     assert anon_client.get("/api/auth/me").status_code == 401
     login(anon_client, "changeme", "reset-pass-12")
     assert anon_client.get("/api/auth/me").json()["must_change_password"] is True
+
+
+def test_guest_is_read_only_and_password_locked(client, anon_client):
+    login(anon_client, GUEST_USERNAME, GUEST_PASSWORD)
+    me = anon_client.get("/api/auth/me")
+    assert me.status_code == 200
+    body = me.json()
+    assert body["username"] == GUEST_USERNAME
+    assert body["display_name"] == "Guest"
+    assert body["password_locked"] is True
+    assert body["must_change_password"] is False
+    assert body["all_projects"] is True
+    assert "packages:read" in body["permissions"]
+    assert "notifications:read" in body["permissions"]
+    assert "packages:write" not in body["permissions"]
+    assert "iam:read" not in body["permissions"]
+    assert "iam:write" not in body["permissions"]
+    assert [role["slug"] for role in body["roles"]] == ["viewer"]
+    listed = anon_client.get("/api/packages", params={"period": "all"})
+    assert listed.status_code == 200
+    denied_write = anon_client.post("/api/packages", json={
+        "document_number": "DOC-GUEST-001",
+        "document_title": "Guest write",
+        "document_date": "2026-09-03",
+        "document_type": "Drawing",
+        "initiator": "Ana",
+        "discipline": "Civil",
+        "number_of_documents": 1,
+    })
+    assert denied_write.status_code == 403
+    assert anon_client.get("/api/iam/users").status_code == 403
+    denied_password = anon_client.post("/api/auth/change-password", json={
+        "current_password": GUEST_PASSWORD,
+        "new_password": "guest-new-password",
+    })
+    assert denied_password.status_code == 400
+    assert "cannot be changed" in denied_password.json()["detail"]
+    reset = client.post(f"/api/iam/users/{body['id']}/reset-password", json={"password": "reset-pass-12", "must_change_password": True})
+    assert reset.status_code == 400
+    assert "cannot be changed" in reset.json()["detail"]
+    promoted = client.patch(f"/api/iam/users/{body['id']}", json={"role_slugs": ["admin"]})
+    assert promoted.status_code == 400
+    assert "Guest account roles cannot be changed" in promoted.json()["detail"]
+    login(anon_client, GUEST_USERNAME, GUEST_PASSWORD)
+    still_guest = anon_client.get("/api/auth/me").json()
+    assert still_guest["password_locked"] is True
+    assert [role["slug"] for role in still_guest["roles"]] == ["viewer"]
 
 
 def test_short_password_rejected(client):

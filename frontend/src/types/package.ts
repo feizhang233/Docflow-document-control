@@ -55,6 +55,25 @@ export interface PackageListResponse {
   page_size: number
 }
 
+export interface TransmittalUse {
+  package_id: number
+  document_number: string
+  transmittal_number: string
+}
+
+export interface TransmittalSeries {
+  type: string
+  prefix: string
+  latest: string | null
+  next: string
+}
+
+export interface TransmittalSuggestions {
+  project_code: ProjectCode
+  series: TransmittalSeries[]
+  used: TransmittalUse[]
+}
+
 export type Period = 'week' | 'month' | 'year' | 'all'
 export type PageKind = 'documents' | 'workflow' | 'transmittal'
 

@@ -7,6 +7,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-docflow}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-docflow_dev_password}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_dev_password}
+    command: --wait_timeout=600 --interactive_timeout=600 --max_connections=200 --skip-name-resolve --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:

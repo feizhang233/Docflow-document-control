@@ -7,12 +7,13 @@ interface Props {
   title: string
   description: ReactNode
   confirmLabel: string
+  cancelLabel?: string
   onClose: () => void
   onConfirm: () => void | Promise<unknown>
   tone?: 'danger' | 'warning'
 }
 
-export function ConfirmDialog({ open, title, description, confirmLabel, onClose, onConfirm, tone = 'danger' }: Props) {
+export function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel = 'Cancel', onClose, onConfirm, tone = 'danger' }: Props) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -110,7 +111,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, onClose,
         <div className="confirm-body" id={descriptionId}>{description}</div>
         {error && <div className="confirm-error" role="alert">{error}</div>}
         <footer>
-          <button ref={cancelRef} type="button" className="secondary-button" onClick={onClose} disabled={pending}>Cancel</button>
+          <button ref={cancelRef} type="button" className="secondary-button" onClick={onClose} disabled={pending}>{cancelLabel}</button>
           <button type="button" className={`confirm-button ${tone}`} onClick={confirm} disabled={pending} aria-busy={pending}>
             {pending ? <LoaderCircle className="spin" size={16} /> : <AlertTriangle size={16} />}
             {confirmLabel}

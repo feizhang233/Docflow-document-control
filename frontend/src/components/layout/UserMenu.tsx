@@ -55,7 +55,7 @@ export function UserMenu() {
               <strong>{user.display_name}</strong>
               <span>@{user.username}</span>
             </div>
-            <button onClick={() => { setOpen(false); setPasswordOpen(true) }}><KeyRound size={15} /> Change password</button>
+            {!user.password_locked && <button onClick={() => { setOpen(false); setPasswordOpen(true) }}><KeyRound size={15} /> Change password</button>}
             <button className="danger" onClick={() => { setOpen(false); logout() }}><LogOut size={15} /> Sign out</button>
           </div>
         )}

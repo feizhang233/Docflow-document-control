@@ -50,6 +50,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    password_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     all_projects: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     session_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

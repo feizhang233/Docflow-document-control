@@ -69,7 +69,7 @@ Vite proxies `/api` to `http://localhost:8000`. Override this with `VITE_API_URL
 
 ## API
 
-All internal, notification, backup, IAM, and external automation endpoints are documented in [API.md](API.md). Configure `EXTERNAL_API_KEY` and `AUTH_SECRET` before deployment. The first empty database creates `BOOTSTRAP_ADMIN_USERNAME` with `BOOTSTRAP_ADMIN_PASSWORD`.
+All internal, notification, backup, IAM, and external automation endpoints are documented in [API.md](API.md). Configure `EXTERNAL_API_KEY` and `AUTH_SECRET` before deployment. The first empty database creates `BOOTSTRAP_ADMIN_USERNAME` with `BOOTSTRAP_ADMIN_PASSWORD`. A read-only `guest` account (password `1234567890`) is also created; its password cannot be changed.
 
 ## Migrations and tests
 

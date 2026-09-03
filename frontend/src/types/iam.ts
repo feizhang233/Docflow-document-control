@@ -33,6 +33,7 @@ export interface AuthUser {
   display_name: string
   is_active: boolean
   must_change_password: boolean
+  password_locked: boolean
   all_projects: boolean
   project_codes: string[]
   roles: Role[]

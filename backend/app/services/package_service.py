@@ -4,9 +4,10 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.repositories.package_repository import PackageRepository
-from app.schemas.package import PackageCreate, PackageUpdate
+from app.schemas.package import PackageCreate, PackageUpdate, TransmittalSeries, TransmittalSuggestions, TransmittalUse
 from app.services.notification_service import NotificationService, describe_submission_progress, describe_workflow_update
 from app.services.settings_service import SettingsService
+from app.services.transmittal import suggestions_for_project
 
 class PackageService:
     def __init__(self, db: Session): self.repo = PackageRepository(db)
@@ -24,14 +25,21 @@ class PackageService:
         settings = SettingsService(self.repo.db)
         if "project_code" in values:
             values["project_code"] = settings.require_project_code(values.get("project_code"))
-            if values["project_code"] != item.project_code and "submission_progress" not in values:
-                from app.services.settings_service import remap_submission_progress
-                values["submission_progress"] = remap_submission_progress(
-                    item.submission_progress,
-                    settings.submission_steps_for(item.project_code),
-                    settings.submission_steps_for(values["project_code"]),
-                )
         target_project = values.get("project_code", item.project_code)
+        newly_assigned_workflow = (
+            "workflow_number" in values
+            and bool(str(values.get("workflow_number") or "").strip())
+            and not str(item.workflow_number or "").strip()
+        )
+        if newly_assigned_workflow and "submission_progress" not in values:
+            values["submission_progress"] = {step: True for step in settings.submission_steps_for(target_project)}
+        elif "project_code" in values and values["project_code"] != item.project_code and "submission_progress" not in values:
+            from app.services.settings_service import remap_submission_progress
+            values["submission_progress"] = remap_submission_progress(
+                item.submission_progress,
+                settings.submission_steps_for(item.project_code),
+                settings.submission_steps_for(values["project_code"]),
+            )
         if "submission_progress" in values:
             values["submission_progress"] = self._progress_for_project(target_project, values.get("submission_progress"))
         if values.get("document_number") is not None and not values["document_number"].strip():
@@ -74,6 +82,14 @@ class PackageService:
         if all(step in current for step in steps):
             return {step: bool(current.get(step, False)) for step in steps}
         return remap_submission_progress(current, list(current.keys()), steps)
+    def transmittal_suggestions(self, project_code: str, allowed_projects: list[str] | None = None):
+        used = self.repo.list_transmittals(project_code=project_code, allowed_projects=allowed_projects)
+        numbers = [row["transmittal_number"] for row in used]
+        return TransmittalSuggestions(
+            project_code=project_code,
+            series=[TransmittalSeries(**entry) for entry in suggestions_for_project(project_code, numbers)],
+            used=[TransmittalUse(**row) for row in used],
+        )
     def require(self, package_id: int):
         item = self.repo.get(package_id)
         if not item: raise HTTPException(status_code=404, detail="Package not found")

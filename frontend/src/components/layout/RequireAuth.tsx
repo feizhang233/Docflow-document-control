@@ -40,7 +40,7 @@ export function RequireAuth() {
   return (
     <>
       <Outlet />
-      {user.must_change_password && (
+      {user.must_change_password && !user.password_locked && (
         <div className="modal-layer password-gate">
           <div className="modal-backdrop" />
           <form className="editor-modal password-gate-card" onSubmit={submit} noValidate>

@@ -137,3 +137,19 @@ class PackageList(BaseModel):
 class ReorderRequest(BaseModel):
     package_ids: list[int] = Field(min_length=1)
     start_index: int = Field(default=0, ge=0)
+
+class TransmittalUse(BaseModel):
+    package_id: int
+    document_number: str
+    transmittal_number: str
+
+class TransmittalSeries(BaseModel):
+    type: str
+    prefix: str
+    latest: str | None
+    next: str
+
+class TransmittalSuggestions(BaseModel):
+    project_code: str
+    series: list[TransmittalSeries]
+    used: list[TransmittalUse]
