@@ -554,22 +554,19 @@ button:not(:disabled), a[href], select:not(:disabled), input[type='checkbox']:no
 .badge.blue { color: var(--color-primary-strong); background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-primary) 14%, var(--color-border)); }
 
 /* Forms, settings, and overlays */
-.form-grid label>span, .project-choice>span, .bulk-toggle-grid label>span { color: var(--color-text); font-size: 9px; font-weight: 620; }
+.form-grid label>span, .project-choice>span, .bulk-toggle-grid label>span, .transmittal-suggest > span { color: var(--color-text); font-size: 9px; font-weight: 620; }
 .form-grid input, .form-grid select, .project-choice select, .bulk-toggle-grid select, .import-review select, .config-text-input, .config-width, .workflow-step-row input, .workflow-reviewer-list input, .workflow-prefix-list input { color: var(--color-ink); border-color: var(--color-border-strong); background: var(--color-surface); border-radius: 9px; }
 .form-grid input:focus, .form-grid select:focus, .project-choice select:focus, .bulk-toggle-grid select:focus, .import-review select:focus, .config-text-input:focus, .config-width:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 11%, transparent); outline: 0; }
 .form-message-slot { min-height: 40px; }
 .form-error-banner { padding: 9px 11px; font-size: 10px; }
 .editor-modal { position: relative; top: auto; left: auto; width: min(720px, 100%); max-height: min(90svh, 860px); overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-muted); box-shadow: var(--shadow-float); transform: none; animation: overlayIn 240ms cubic-bezier(.22,1,.36,1) both; }
-.editor-modal.has-suggest { width: min(980px, 100%); }
-.editor-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
-.editor-modal.has-suggest .editor-layout { grid-template-columns: minmax(0, 1fr) 252px; }
-.transmittal-suggest { display: flex; flex-direction: column; gap: 8px; padding: 22px 18px; border-left: 1px solid var(--color-border); background: var(--color-surface); }
-.transmittal-suggest-kicker { margin: 10px 0 0; color: var(--color-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.transmittal-suggest-number { margin: 0; color: var(--color-ink); font: 700 15px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
-.transmittal-suggest > p { margin: 0; color: var(--color-muted); font-size: 11px; line-height: 1.45; }
-.transmittal-suggest .secondary-button { width: 100%; margin-top: 6px; }
-.transmittal-suggest-state { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--color-muted); font-size: 11px; line-height: 1.45; }
-.form-grid .transmittal-field { grid-column: 1 / -1; }
+.transmittal-suggest { display: flex; flex-direction: column; min-width: 0; }
+.transmittal-suggest > span { display: block; margin-bottom: 6px; color: var(--color-text); font-size: 9px; font-weight: 620; }
+.transmittal-suggest-code { width: 100%; height: 42px; display: flex; align-items: center; padding: 0 10px; overflow: hidden; border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, var(--color-border)); border-radius: 9px; background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)); color: var(--color-primary-strong); font: 650 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.transmittal-suggest-code:hover { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 11%, var(--color-surface)); }
+.transmittal-suggest-code:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 11%, transparent); outline: 0; }
+.transmittal-suggest-code.applied { border-style: solid; color: var(--color-ink); background: var(--color-surface); }
+.transmittal-suggest-state { height: 42px; display: flex; align-items: center; gap: 7px; color: var(--color-muted); font-size: 11px; }
 .field-warning { display: block; margin-top: 6px; color: var(--color-warning); font-size: 10px; font-weight: 650; line-height: 1.4; }
 .form-grid input[aria-invalid='true'] { border-color: color-mix(in srgb, var(--color-warning) 55%, var(--color-border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 12%, transparent); }
 .editor-modal>header { height: 78px; color: var(--color-text); border-bottom-color: var(--color-border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--color-surface); }
@@ -643,7 +640,6 @@ html[data-theme='dark'] .table-toolbar,
 html[data-theme='dark'] .detail-drawer>header,
 html[data-theme='dark'] .editor-modal>header,
 html[data-theme='dark'] .editor-modal>footer,
-html[data-theme='dark'] .transmittal-suggest,
 html[data-theme='dark'] .drawer-section,
 html[data-theme='dark'] .detail-grid>div,
 html[data-theme='dark'] .backup-card,
@@ -684,9 +680,6 @@ html[data-theme='dark'] .settings-heading h2 { color: var(--color-ink); }
 }
 
 @media (max-width: 900px) {
-  .editor-modal.has-suggest { width: min(720px, 100%); }
-  .editor-modal.has-suggest .editor-layout { grid-template-columns: 1fr; }
-  .transmittal-suggest { border-left: 0; border-top: 1px solid var(--color-border); }
   .sidebar { width: 248px; transform: translateX(-100%); transition: transform 240ms cubic-bezier(.22,1,.36,1); }
   .sidebar.open { transform: translateX(0); }
   .sidebar-is-collapsed .sidebar { width: 248px; }
@@ -739,9 +732,6 @@ html[data-theme='dark'] .settings-heading h2 { color: var(--color-ink); }
   .confirm-body { padding-left: 21px; }
   .modal-layer { padding: 0; }
   .editor-modal { width: 100vw; max-height: 100svh; min-height: 100svh; border-radius: 0; }
-  .editor-modal.has-suggest { width: 100vw; }
-  .editor-modal.has-suggest .editor-layout { grid-template-columns: 1fr; }
-  .transmittal-suggest { border-left: 0; border-top: 1px solid var(--color-border); }
   .editor-modal>header, .editor-modal>footer { border-radius: 0; }
   .detail-drawer { width: 100vw; }
 }

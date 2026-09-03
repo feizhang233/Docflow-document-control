@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog'
 import { ModalLayer } from '../common/ModalLayer'
 import { useProjects } from '../../hooks/useProjects'
 import { packagesApi } from '../../lib/api'
-import { columnOptionsFor, findUsedTransmittal, isAutomaticTransmittalNumber, submissionStepsFor, transmittalPrefix, transmittalTypeFor } from '../../lib/projects'
+import { columnOptionsFor, findUsedTransmittal, isAutomaticTransmittalNumber, submissionStepsFor, transmittalPrefix } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 import { TransmittalSuggest } from './TransmittalSuggest'
 
@@ -97,9 +97,8 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
     else set(field, raw)
   }
   return <ModalLayer open={open} onClose={() => { if (duplicateOpen) setDuplicateOpen(false); else onClose() }} label={item ? 'Edit document' : 'Create document'}>
-    <form className={`editor-modal ${item ? '' : 'has-suggest'}`} noValidate onSubmit={e=>{e.preventDefault(); if (duplicateUse) { setDuplicateOpen(true); return } onSave(payload())}}>
+    <form className="editor-modal" noValidate onSubmit={e=>{e.preventDefault(); if (duplicateUse) { setDuplicateOpen(true); return } onSave(payload())}}>
       <header><div><span className="eyebrow">{item?'Editing document':'New document'}</span><h2>{item?.document_number||'Create document'}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close editor"><X size={19}/></button></header>
-      <div className="editor-layout">
       <div className="editor-body">
         <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,submission_progress:String(previous.workflow_number||'').trim()?completeProgress(project):remapProgress(project,previous.submission_progress),transmittal_number:!item && followsSeries(previous.transmittal_number, previous.project_code, previous.document_type)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{!projects.some(project=>project.code===form.project_code)&&form.project_code&&<option value={form.project_code}>{form.project_code}</option>}{projects.map(project=><option key={project.code} value={project.code}>{project.code} · {labels[project.code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
         <div className="form-grid">{fields.map(field => {
@@ -107,16 +106,16 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
           const options=config?.input_type==='select' ? columnOptionsFor(config,form.project_code,fallback[field.name]||[]) : fallback[field.name]
           const value=String(form[field.name]??'')
           const inputType=field.name==='document_date'?'date':field.name==='number_of_documents'?'number':'text'
-          return <label key={field.name} className={field.name === 'transmittal_number' ? 'transmittal-field' : undefined}><span>{field.label}</span>{options?.length ? <select value={value} onChange={e=>setBase(field.name,e.target.value)}><option value="">Select {field.label.toLowerCase()}</option>{!options.includes(value)&&value&&<option value={value}>{value}</option>}{options.map(option=><option key={option} value={option}>{option}</option>)}</select> : <input type={inputType} min={inputType==='number'?1:undefined} value={value} placeholder={field.placeholder} onChange={e=>setBase(field.name,e.target.value)} aria-invalid={field.name==='transmittal_number'&&!!duplicateUse}/>}{field.name==='transmittal_number'&&duplicateUse&&<small className="field-warning" role="status">Already used on {duplicateUse.document_number}. You can still keep this number.</small>}</label>
-        })}</div>
+          return <label key={field.name}><span>{field.label}</span>{options?.length ? <select value={value} onChange={e=>setBase(field.name,e.target.value)}><option value="">Select {field.label.toLowerCase()}</option>{!options.includes(value)&&value&&<option value={value}>{value}</option>}{options.map(option=><option key={option} value={option}>{option}</option>)}</select> : <input type={inputType} min={inputType==='number'?1:undefined} value={value} placeholder={field.placeholder} onChange={e=>setBase(field.name,e.target.value)} aria-invalid={field.name==='transmittal_number'&&!!duplicateUse}/>}{field.name==='transmittal_number'&&duplicateUse&&<small className="field-warning" role="status">Already used on {duplicateUse.document_number}. You can still keep this number.</small>}</label>
+        })}
+        {!item && <TransmittalSuggest next={currentSeries?.next || transmittalPrefix(form.project_code, form.document_type) + '001'} applied={Boolean(currentSeries?.next && form.transmittal_number === currentSeries.next)} loading={transmittalsQuery.isLoading} error={transmittalsQuery.isError} onApply={() => currentSeries?.next && set('transmittal_number', currentSeries.next)} />}
+        </div>
         <details className="editor-more">
           <summary>More</summary>
           <fieldset><legend>Submission progress</legend><SubmissionSlider steps={currentSteps} value={currentSteps.filter(step=>form.submission_progress[step]).length} onChange={value=>set('submission_progress',Object.fromEntries(currentSteps.map((step,index)=>[step,index<value])) as PackageInput['submission_progress'])} disabled={form.is_abandoned}/></fieldset>
           <fieldset><legend>Has attachment</legend><div className="editor-switch-row"><div><strong>Document has attachment</strong><span>Highlights the row and replaces the date display.</span></div><label className="switch"><input type="checkbox" checked={form.has_attachment} onChange={e=>set('has_attachment',e.target.checked)}/><i/></label></div></fieldset>
           <fieldset><legend>Feedback Status</legend><div className="feedback-status-editor">{workflowConfig.feedback_reviewers.map(reviewer=><label key={reviewer}><span>{reviewer}</span><select value={form.feedback_status[reviewer]||'P'} onChange={e=>{const status=e.target.value as FeedbackStatusCode;setForm(previous=>({...previous,feedback_status:{...previous.feedback_status,[reviewer]:status},feedback:{...previous.feedback,[reviewer]:status!=='P'}}))}}>{Object.entries(workflowConfig.feedback_status_labels).map(([code,label])=><option key={code} value={code}>{code} – {label}</option>)}</select></label>)}</div><div className="editor-switch-row terminate-feedback-row"><div><strong>Terminate workflow</strong><span>Terminates the feedback workflow and displays its progress bar in grey.</span></div><label className="switch"><input type="checkbox" checked={form.feedback.Terminate} onChange={e=>set('feedback',{...form.feedback,Terminate:e.target.checked})}/><i/></label></div></fieldset>
         </details>
-      </div>
-      {!item && <TransmittalSuggest type={currentSeries?.type || transmittalTypeFor(form.document_type)} latest={currentSeries?.latest || null} next={currentSeries?.next || transmittalPrefix(form.project_code, form.document_type) + '001'} applied={Boolean(currentSeries?.next && form.transmittal_number === currentSeries.next)} loading={transmittalsQuery.isLoading} error={transmittalsQuery.isError} onApply={() => currentSeries?.next && set('transmittal_number', currentSeries.next)} />}
       </div>
       <footer><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving?<LoaderCircle className="spin" size={16}/>:<Save size={16}/>} {saving?'Saving…':'Save document'}</button></footer>
     </form>
