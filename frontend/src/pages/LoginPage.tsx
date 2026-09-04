@@ -60,7 +60,6 @@ export function LoginPage() {
             </div>
           </div>
         </div>
-        <div className="login-grid-glow" aria-hidden="true" />
       </section>
       <section className="login-form-side">
         <form className="login-card" onSubmit={submit} noValidate>

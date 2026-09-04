@@ -7,6 +7,21 @@ from app.models.package import Package
 
 SORTABLE_FIELDS = {"project_code","document_number","document_title","document_date","document_type","initiator","discipline","number_of_documents","transmittal_number","workflow_number","workflow_terminated","is_abandoned","has_attachment","order_index","created_at","updated_at"}
 
+def sync_termination_flags(values: dict, current_feedback: dict | None = None) -> dict:
+    """Keep workflow_terminated and feedback.Terminate as one switch."""
+    if "workflow_terminated" not in values and "feedback" not in values:
+        return values
+    feedback = dict(current_feedback or {})
+    if values.get("feedback") is not None:
+        feedback.update(values["feedback"])
+    if "workflow_terminated" in values:
+        feedback["Terminate"] = bool(values["workflow_terminated"])
+    else:
+        values["workflow_terminated"] = bool(feedback.get("Terminate"))
+    values["feedback"] = feedback
+    return values
+
+
 def period_bounds(period: str, today: date | None = None) -> tuple[date, date]:
     """Return an inclusive start and exclusive end for the current calendar period."""
     current = today or date.today()
@@ -60,7 +75,6 @@ class PackageRepository:
             if transmittal_number
         ]
     def get(self, package_id: int): return self.db.get(Package, package_id)
-    def get_by_workflow_number(self, number: str): return self.db.scalars(select(Package).where(Package.workflow_number == number).order_by(Package.id)).first()
     def list_by_workflow_number(self, number: str) -> list[Package]:
         """Return every package that shares a workflow number (revisions/duplicates)."""
         return list(
@@ -69,8 +83,9 @@ class PackageRepository:
             )
         )
     def create(self, values: dict):
-        item = Package(**values); self.db.add(item); self.db.commit(); self.db.refresh(item); return item
+        item = Package(**sync_termination_flags(values)); self.db.add(item); self.db.commit(); self.db.refresh(item); return item
     def update(self, item: Package, values: dict):
+        values = sync_termination_flags(values, item.feedback)
         for key, value in values.items(): setattr(item, key, value)
         self.db.commit(); self.db.refresh(item); return item
     def delete(self, item: Package): self.db.delete(item); self.db.commit()

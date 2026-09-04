@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog'
 import { ModalLayer } from '../common/ModalLayer'
 import { useProjects } from '../../hooks/useProjects'
 import { packagesApi } from '../../lib/api'
-import { columnOptionsFor, findUsedTransmittal, isAutomaticTransmittalNumber, submissionStepsFor, transmittalPrefix } from '../../lib/projects'
+import { columnOptionsFor, defaultDisciplines, defaultDocumentTypes, findUsedTransmittal, isAutomaticTransmittalNumber, submissionStepsFor, transmittalPrefix } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 import { TransmittalSuggest } from './TransmittalSuggest'
 
@@ -33,8 +33,8 @@ const fields: Array<{ name: BaseField; label: string; placeholder?: string }> = 
   {name:'transmittal_number',label:'Transmittal number',placeholder:'Project-PCH-TRA-'},
 ]
 const fallback: Partial<Record<BaseField, string[]>> = {
-  document_type:['Drawing','Technical Report','Method Statement','Specification','Calculation'],
-  discipline:['Civil','Structural','Architectural','Electrical','Mechanical','Geotechnical'],
+  document_type: defaultDocumentTypes,
+  discipline: defaultDisciplines,
 }
 
 export function PackageEditor({ item, configs, workflowConfig, open, saving, onClose, onSave, defaultProject }: { item: Package | null; configs: ColumnConfig[]; workflowConfig: WorkflowConfig; open: boolean; saving: boolean; onClose: () => void; onSave: (data: PackageInput) => void; defaultProject?: ProjectCode }) {
@@ -74,9 +74,9 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
   const payload = () => ({...form, document_date:form.document_date||today()})
   if (!open) return null
   const currentSteps=submissionStepsFor(workflowConfig,form.project_code)
-  const remapProgress=(project:ProjectCode,progress:PackageInput['submission_progress'])=>{
-    const previousSteps=submissionStepsFor(workflowConfig,form.project_code)
-    const nextSteps=submissionStepsFor(workflowConfig,project)
+  const remapProgress=(fromProject:ProjectCode,toProject:ProjectCode,progress:PackageInput['submission_progress'])=>{
+    const previousSteps=submissionStepsFor(workflowConfig,fromProject)
+    const nextSteps=submissionStepsFor(workflowConfig,toProject)
     return Object.fromEntries(nextSteps.map((step,index)=>[step,index<previousSteps.length?!!progress[previousSteps[index]]:false])) as PackageInput['submission_progress']
   }
   const set = <K extends keyof PackageInput>(key: K, value: PackageInput[K]) => setForm(prev => ({...prev,[key]:value}))
@@ -100,7 +100,7 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
     <form className="editor-modal" noValidate onSubmit={e=>{e.preventDefault(); if (duplicateUse) { setDuplicateOpen(true); return } onSave(payload())}}>
       <header><div><span className="eyebrow">{item?'Editing document':'New document'}</span><h2>{item?.document_number||'Create document'}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close editor"><X size={19}/></button></header>
       <div className="editor-body">
-        <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,submission_progress:String(previous.workflow_number||'').trim()?completeProgress(project):remapProgress(project,previous.submission_progress),transmittal_number:!item && followsSeries(previous.transmittal_number, previous.project_code, previous.document_type)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{!projects.some(project=>project.code===form.project_code)&&form.project_code&&<option value={form.project_code}>{form.project_code}</option>}{projects.map(project=><option key={project.code} value={project.code}>{project.code} · {labels[project.code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
+        <label className="project-choice"><span>Project</span><select value={form.project_code} onChange={event=>{const project=event.target.value as ProjectCode;setForm(previous=>({...previous,project_code:project,submission_progress:String(previous.workflow_number||'').trim()?completeProgress(project):remapProgress(previous.project_code,project,previous.submission_progress),transmittal_number:!item && followsSeries(previous.transmittal_number, previous.project_code, previous.document_type)?transmittalPrefix(project,previous.document_type):previous.transmittal_number}))}}>{!projects.some(project=>project.code===form.project_code)&&form.project_code&&<option value={form.project_code}>{form.project_code}</option>}{projects.map(project=><option key={project.code} value={project.code}>{project.code} · {labels[project.code]}</option>)}</select><small>WF numbering remains shared across all projects.</small></label>
         <div className="form-grid">{fields.map(field => {
           const config=configMap[field.name]
           const options=config?.input_type==='select' ? columnOptionsFor(config,form.project_code,fallback[field.name]||[]) : fallback[field.name]
@@ -114,7 +114,7 @@ export function PackageEditor({ item, configs, workflowConfig, open, saving, onC
           <summary>More</summary>
           <fieldset><legend>Submission progress</legend><SubmissionSlider steps={currentSteps} value={currentSteps.filter(step=>form.submission_progress[step]).length} onChange={value=>set('submission_progress',Object.fromEntries(currentSteps.map((step,index)=>[step,index<value])) as PackageInput['submission_progress'])} disabled={form.is_abandoned}/></fieldset>
           <fieldset><legend>Has attachment</legend><div className="editor-switch-row"><div><strong>Document has attachment</strong><span>Highlights the row and replaces the date display.</span></div><label className="switch"><input type="checkbox" checked={form.has_attachment} onChange={e=>set('has_attachment',e.target.checked)}/><i/></label></div></fieldset>
-          <fieldset><legend>Feedback Status</legend><div className="feedback-status-editor">{workflowConfig.feedback_reviewers.map(reviewer=><label key={reviewer}><span>{reviewer}</span><select value={form.feedback_status[reviewer]||'P'} onChange={e=>{const status=e.target.value as FeedbackStatusCode;setForm(previous=>({...previous,feedback_status:{...previous.feedback_status,[reviewer]:status},feedback:{...previous.feedback,[reviewer]:status!=='P'}}))}}>{Object.entries(workflowConfig.feedback_status_labels).map(([code,label])=><option key={code} value={code}>{code} – {label}</option>)}</select></label>)}</div><div className="editor-switch-row terminate-feedback-row"><div><strong>Terminate workflow</strong><span>Terminates the feedback workflow and displays its progress bar in grey.</span></div><label className="switch"><input type="checkbox" checked={form.feedback.Terminate} onChange={e=>set('feedback',{...form.feedback,Terminate:e.target.checked})}/><i/></label></div></fieldset>
+          <fieldset><legend>Feedback Status</legend><div className="feedback-status-editor">{workflowConfig.feedback_reviewers.map(reviewer=><label key={reviewer}><span>{reviewer}</span><select value={form.feedback_status[reviewer]||'P'} onChange={e=>{const status=e.target.value as FeedbackStatusCode;setForm(previous=>({...previous,feedback_status:{...previous.feedback_status,[reviewer]:status},feedback:{...previous.feedback,[reviewer]:status!=='P'}}))}}>{Object.entries(workflowConfig.feedback_status_labels).map(([code,label])=><option key={code} value={code}>{code} – {label}</option>)}</select></label>)}</div><div className="editor-switch-row terminate-feedback-row"><div><strong>Terminate workflow</strong><span>Terminates the feedback workflow and displays its progress bar in grey.</span></div><label className="switch"><input type="checkbox" checked={form.workflow_terminated||form.feedback.Terminate} onChange={e=>{const terminated=e.target.checked;setForm(previous=>({...previous,workflow_terminated:terminated,feedback:{...previous.feedback,Terminate:terminated}}))}}/><i/></label></div></fieldset>
         </details>
       </div>
       <footer><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving?<LoaderCircle className="spin" size={16}/>:<Save size={16}/>} {saving?'Saving…':'Save document'}</button></footer>

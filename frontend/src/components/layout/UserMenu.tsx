@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { getApiError } from '../../lib/api'
 import { initials, roleLabel } from '../../types/iam'
 import { SecretInput } from '../common/SecretInput'
+import { ModalLayer } from '../common/ModalLayer'
 
 export function UserMenu() {
   const { user, logout, changePassword } = useAuth()
@@ -60,9 +61,7 @@ export function UserMenu() {
           </div>
         )}
       </div>
-      {passwordOpen && (
-        <div className="modal-layer">
-          <div className="modal-backdrop" onClick={() => setPasswordOpen(false)} />
+      <ModalLayer open={passwordOpen} onClose={() => setPasswordOpen(false)} label="Change password">
           <form className="editor-modal password-gate-card" onSubmit={submit} noValidate>
             <header>
               <div>
@@ -83,8 +82,7 @@ export function UserMenu() {
               <button className="primary-button" type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <KeyRound size={16} />} Update password</button>
             </footer>
           </form>
-        </div>
-      )}
+      </ModalLayer>
     </>
   )
 }

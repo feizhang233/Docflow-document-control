@@ -66,5 +66,5 @@ def reorder_packages(data:ReorderRequest,db:Session=Depends(get_db), user: User=
         raise HTTPException(status_code=400,detail="One or more package IDs do not exist")
     for item in items.values():
         assert_project_access(user, item.project_code)
-    if not repo.reorder(data.package_ids, data.start_index): raise HTTPException(status_code=400,detail="One or more package IDs do not exist")
+    repo.reorder(data.package_ids, data.start_index)
     return Response(status_code=204)

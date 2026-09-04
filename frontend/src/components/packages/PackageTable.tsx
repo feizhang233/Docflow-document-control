@@ -5,11 +5,13 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Copy, Eye, GripVertical, MoreHorizontal, OctagonX, Paperclip, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import type { ColumnConfig, ColumnField, FeedbackStatusCode, Package, PageKind } from '../../types/package'
+import { columnOptionColorsFor } from '../../lib/projects'
 import { ProgressTrack } from '../common/ProgressTrack'
 import { StatusBadge } from '../common/StatusBadge'
 import { SyncedHorizontalScroll } from '../common/SyncedHorizontalScroll'
 import { FeedbackStatus } from './FeedbackStatus'
 import { ConfirmDialog } from '../common/ConfirmDialog'
+import { useDismissableLayer } from '../../hooks/useDismissableLayer'
 interface Props {
   items: Package[]
   highlightedPackageId: number | null
@@ -31,7 +33,7 @@ interface Props {
   onView: (item: Package) => void
   onEdit: (item: Package) => void
   onReorder: (ids: number[]) => void
-  onAdvance?: (item: Package, type: 'submission' | 'feedback') => void
+  onAdvance?: (item: Package) => void
   onDuplicate: (item: Package) => void
   onToggleAbandoned: (item: Package) => void
   onToggleTerminate: (item: Package) => void
@@ -118,24 +120,7 @@ function RowMenu({
   const [coords, setCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const closeOutside = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (buttonRef.current?.contains(target) || popoverRef.current?.contains(target)) return
-      setMenuOpen(false)
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', closeOutside)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('mousedown', closeOutside)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [menuOpen])
+  const menuRef = useDismissableLayer<HTMLDivElement>(menuOpen && !deleteOpen, () => setMenuOpen(false), [popoverRef])
 
   useLayoutEffect(() => {
     if (!menuOpen) {
@@ -165,7 +150,7 @@ function RowMenu({
 
   return (
     <>
-    <div className="row-menu">
+    <div className="row-menu" ref={menuRef}>
       <button
         ref={buttonRef}
         onClick={(event) => {
@@ -180,7 +165,7 @@ function RowMenu({
       {menuOpen && coords && createPortal(
         <div
           ref={popoverRef}
-          className={`row-menu-popover ${coords.openUp ? 'open-up' : ''}`}
+          className="row-menu-popover"
           style={{
             position: 'fixed',
             top: coords.openUp ? undefined : coords.top,
@@ -251,7 +236,6 @@ function SortableRow({
   canWrite?: boolean
   canDelete?: boolean
 }) {
-  const [reorderHint, setReorderHint] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canWrite })
   const style = { transform: CSS.Transform.toString(transform), transition }
   const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_number'
@@ -284,7 +268,6 @@ function SortableRow({
               {...attributes}
               {...listeners}
               aria-label="Drag to reorder. Use Alt and arrow keys for keyboard reordering."
-              onClick={() => setReorderHint(true)}
               onKeyDown={(event) => {
                 if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
                 event.preventDefault()
@@ -292,20 +275,19 @@ function SortableRow({
               }}
             ><GripVertical size={16} /></button>
           ) : null}
-          {reorderHint && <span className="sr-only" role="status">Use Alt with the up or down arrow key to move this row.</span>}
         </td>
       )}
       {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
       {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
       {shown('document_title') && <td className="document-title-cell" style={styleFor(config('document_title'))}>{item.document_title || '—'}</td>}
       {shown('document_date') && <td className="mono-cell" style={styleFor(config('document_date'))}>{item.has_attachment ? <span className="attachment-label"><Paperclip /> Attachment</span> : item.document_date}</td>}
-      {shown('document_type') && <td style={styleFor(config('document_type'))}><StatusBadge status={item.document_type} color={config('document_type')?.option_colors[item.document_type]} /></td>}
+      {shown('document_type') && <td style={styleFor(config('document_type'))}><StatusBadge status={item.document_type} color={columnOptionColorsFor(config('document_type'), item.project_code)[item.document_type]} /></td>}
       {shown('initiator') && <td style={styleFor(config('initiator'))}><div className="person-cell"><span>{item.initiator.split(' ').map((s) => s[0]).join('').slice(0, 2)}</span>{item.initiator}</div></td>}
       {shown('discipline') && <td style={styleFor(config('discipline'))}>{item.discipline}</td>}
       {shown('number_of_documents') && <td className="number-cell" style={styleFor(config('number_of_documents'))}>{item.number_of_documents}</td>}
       {primaryField !== 'transmittal_number' && shown('transmittal_number') && <td className="mono-cell" style={styleFor(config('transmittal_number'))}>{item.transmittal_number || '—'}</td>}
       {primaryField !== 'workflow_number' && shown('workflow_number') && <td className="mono-cell" style={styleFor(config('workflow_number'))}>{item.workflow_number || '—'}</td>}
-      {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionStepsFor?.(item.project_code) || submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={canWrite && onAdvance ? () => onAdvance(item, 'submission') : undefined} /></td>}
+      {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionStepsFor?.(item.project_code) || submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={canWrite && onAdvance ? () => onAdvance(item) : undefined} /></td>}
       {shown('feedback') && <td className="progress-cell feedback" style={styleFor(config('feedback'))}><FeedbackStatus item={item} reviewers={feedbackReviewers} statusLabels={feedbackStatusLabels} statusColors={feedbackStatusColors} compact /></td>}
       <td className="action-cell">
         <button onClick={(event) => { event.stopPropagation(); onView(item) }} aria-label="View document"><Eye size={17} /></button>

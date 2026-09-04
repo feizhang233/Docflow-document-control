@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Save, X } from 'lucide-react'
 import type { ColumnConfig, InputColumnField, Package, PackageInput, WorkflowConfig } from '../../types/package'
 import { ModalLayer } from '../common/ModalLayer'
-import { columnOptionsFor, submissionStepsFor } from '../../lib/projects'
+import { columnOptionsFor, defaultDisciplines, defaultDocumentTypes, submissionStepsFor } from '../../lib/projects'
 import { SubmissionSlider } from './SubmissionSlider'
 
 type BulkField = Extract<InputColumnField, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents'> | 'notes'
@@ -16,8 +16,8 @@ const bulkFields: Array<{ name: BulkField; label: string; placeholder?: string }
 ]
 
 const fallback: Partial<Record<BulkField, string[]>> = {
-  document_type: ['Drawing', 'Technical Report', 'Method Statement', 'Specification', 'Calculation'],
-  discipline: ['Civil', 'Structural', 'Architectural', 'Electrical', 'Mechanical', 'Geotechnical'],
+  document_type: defaultDocumentTypes,
+  discipline: defaultDisciplines,
 }
 
 export type BulkPackagePatch = Partial<Pick<PackageInput, 'document_type' | 'initiator' | 'discipline' | 'number_of_documents' | 'notes' | 'has_attachment' | 'is_abandoned' | 'workflow_terminated' | 'submission_progress'>>

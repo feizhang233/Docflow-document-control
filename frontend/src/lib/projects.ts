@@ -20,7 +20,10 @@ export function projectFilterFrom(value: string | null, codes: readonly string[]
   return canSeeAll || codes.length !== 1 ? 'ALL' : codes[0] || 'ALL'
 }
 
-export function transmittalTypeFor(documentType: string): 'PZI' | 'RFI' | 'RPT' {
+export const defaultDocumentTypes = ['Drawing', 'Technical Report', 'Method Statement', 'Specification', 'Calculation']
+export const defaultDisciplines = ['Civil', 'Structural', 'Architectural', 'Electrical', 'Mechanical', 'Geotechnical']
+
+function transmittalTypeFor(documentType: string): 'PZI' | 'RFI' | 'RPT' {
   return documentType === 'PZI' ? 'PZI' : documentType === 'RFI' ? 'RFI' : 'RPT'
 }
 

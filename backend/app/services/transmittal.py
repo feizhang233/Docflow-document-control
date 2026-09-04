@@ -1,21 +1,8 @@
 TRANSMITTAL_TYPES = ("PZI", "RFI", "RPT")
 
 
-def type_for_document(document_type: str | None) -> str:
-    value = (document_type or "").strip()
-    if value == "PZI":
-        return "PZI"
-    if value == "RFI":
-        return "RFI"
-    return "RPT"
-
-
 def prefix_for_type(project_code: str, transmittal_type: str) -> str:
     return f"{project_code}-PCH-TRA-{transmittal_type}-"
-
-
-def prefix_for_document(project_code: str, document_type: str | None) -> str:
-    return prefix_for_type(project_code, type_for_document(document_type))
 
 
 def sequence_from(number: str | None, prefix: str) -> tuple[int, int] | None:

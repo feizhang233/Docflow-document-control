@@ -3,7 +3,6 @@ export const submissionSteps = [
 ] as const
 export const feedbackSteps = ['UTIBER', 'GDS'] as const
 export const feedbackStatusLabels = { A:'Approved', B:'Approved with comments', C:'Rejected', P:'Pending' } as const
-export const defaultProjectCodes = ['NFS', 'FST', 'FBP'] as const
 
 export type FeedbackStatusCode = keyof typeof feedbackStatusLabels
 export type ProjectCode = string

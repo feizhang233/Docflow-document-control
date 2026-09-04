@@ -6,11 +6,17 @@ export function ModalLayer({
   onClose,
   label,
   children,
+  variant = 'dialog',
+  closeOnBackdrop = true,
+  closeOnEscape = true,
 }: {
   open: boolean
   onClose: () => void
   label: string
   children: ReactNode
+  variant?: 'dialog' | 'drawer'
+  closeOnBackdrop?: boolean
+  closeOnEscape?: boolean
 }) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -20,23 +26,26 @@ export function ModalLayer({
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        onCloseRef.current()
-      }
+      if (!closeOnEscape || event.key !== 'Escape') return
+      if (document.querySelector('.confirm-layer')) return
+      event.preventDefault()
+      onCloseRef.current()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [open, closeOnEscape])
 
   if (!open) return null
 
+  const layerClass = variant === 'drawer' ? 'drawer-layer' : 'modal-layer'
+  const backdropClass = variant === 'drawer' ? 'drawer-backdrop' : 'modal-backdrop'
+
   return createPortal(
-    <div className="modal-layer" role="dialog" aria-modal="true" aria-label={label}>
-      <div className="modal-backdrop" onClick={onClose} />
+    <div className={layerClass} role="dialog" aria-modal="true" aria-label={label}>
+      <div className={backdropClass} onClick={closeOnBackdrop ? onClose : undefined} />
       {children}
     </div>,
     document.body,

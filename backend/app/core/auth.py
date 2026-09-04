@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.models.iam import User
 
 
-def _client_ip(request: Request) -> str | None:
+def client_ip(request: Request) -> str | None:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()[:64]
@@ -40,7 +40,7 @@ def get_current_user(
     if int(payload.get("sv") or 0) != user.session_version:
         raise HTTPException(status_code=401, detail="Not authenticated")
     request.state.user = user
-    request.state.client_ip = _client_ip(request)
+    request.state.client_ip = client_ip(request)
     return user
 
 

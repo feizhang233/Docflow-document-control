@@ -43,9 +43,8 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const canDelete = can('packages:delete')
   const canManageColumns = can('settings:write')
   const selectedProject = projectFilterFrom(searchParams.get('project'), codes, canSeeAll)
-  const focusParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const focusValue = focusParams.get('focus') || ''
-  const focusPackageId = Number(focusParams.get('package')) || null
+  const focusValue = searchParams.get('focus') || ''
+  const focusPackageId = Number(searchParams.get('package')) || null
   const period = kind === 'documents' ? (routePeriod as Period || 'week') : 'all'
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') || '')
   const [search, setSearch] = useState(() => searchParams.get('q') || '')
@@ -142,6 +141,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     onSuccess: ({ updated, failed }) => {
       toast.success(failed ? `Updated ${updated} documents · ${failed} failed` : `Updated ${updated} documents`)
       setBulkEditorOpen(false)
+      setBulkMenuOpen(false)
       setSelectedIds(new Set())
       refresh()
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -164,22 +164,6 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     },
     onError: (e) => toast.error(getApiError(e)),
   })
-  const bulkFlag = useMutation({
-    mutationFn: async ({ ids, data }: { ids: number[]; data: Partial<PackageInput> }) => {
-      const results = await Promise.allSettled(ids.map((id) => packagesApi.update(id, data)))
-      const failed = results.filter((result) => result.status === 'rejected').length
-      if (failed === ids.length) throw new Error('Could not update any selected documents')
-      return { updated: ids.length - failed, failed }
-    },
-    onSuccess: ({ updated, failed }) => {
-      toast.success(failed ? `Updated ${updated} documents · ${failed} failed` : `Updated ${updated} documents`)
-      setBulkMenuOpen(false)
-      setSelectedIds(new Set())
-      refresh()
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    },
-    onError: (e) => toast.error(getApiError(e)),
-  })
   const resizeColumn = useMutation({
     mutationFn: ({ config, width }: { config: NonNullable<typeof configs.data>[number]; width: number }) => settingsApi.updateColumn(config.field_name, {
       display_name: config.display_name,
@@ -188,6 +172,9 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
       input_type: config.input_type,
       options: config.options,
       option_colors: config.option_colors,
+      share_options: config.share_options,
+      project_options: config.project_options,
+      project_option_colors: config.project_option_colors,
     }),
     onMutate: async ({ config, width }) => {
       await queryClient.cancelQueries({ queryKey: ['column-configs'] })
@@ -283,7 +270,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const visibleItems = useMemo(() => {
     const items = query.data?.items || []
     const valueFor = (item: Package, field: FilterRule['field']): string => {
-      if (field === 'submission_progress') return String(Math.round(currentSubmissionSteps.filter((step) => item.submission_progress[step]).length / currentSubmissionSteps.length * 100))
+      if (field === 'submission_progress') {
+        const steps = submissionStepsFor(workflowConfig, item.project_code)
+        return String(Math.round(steps.filter((step) => item.submission_progress[step]).length / Math.max(steps.length, 1) * 100))
+      }
       if (field === 'feedback') return item.feedback.Terminate ? 'terminated' : String(Math.round(currentFeedbackReviewers.filter((step) => item.feedback[step]).length / currentFeedbackReviewers.length * 100))
       return String(item[field] ?? '')
     }
@@ -293,7 +283,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
       const expected = rule.value.toLowerCase()
       return rule.operator === 'contains' ? actual.includes(expected) : rule.operator === 'equals' ? actual === expected : actual !== expected
     }))
-  }, [query.data?.items, filters, currentFeedbackReviewers, currentSubmissionSteps])
+  }, [query.data?.items, filters, currentFeedbackReviewers, workflowConfig])
   const selectedItems = useMemo(() => visibleItems.filter((item) => selectedIds.has(item.id)), [visibleItems, selectedIds])
   useEffect(() => {
     const visibleIdSet = new Set(visibleItems.map((item) => item.id))
@@ -307,16 +297,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
       return changed ? next : prev
     })
   }, [visibleItems])
-  const advance = (item: Package, type: 'submission' | 'feedback') => {
-    if (type === 'submission') {
-      const next = stepsForProject(item.project_code).find((step) => !item.submission_progress[step])
-      if (!next) return
-      quickUpdate.mutate({ id: item.id, data: { submission_progress: { ...item.submission_progress, [next]: true } } })
-      return
-    }
-    const next = currentFeedbackReviewers.find((step) => !item.feedback[step])
+  const advance = (item: Package) => {
+    const next = stepsForProject(item.project_code).find((step) => !item.submission_progress[step])
     if (!next) return
-    quickUpdate.mutate({ id: item.id, data: { feedback: { ...item.feedback, [next]: true } } })
+    quickUpdate.mutate({ id: item.id, data: { submission_progress: { ...item.submission_progress, [next]: true } } })
   }
   const exitSelectionMode = () => {
     setSelectionMode(false)
@@ -453,7 +437,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
               <div className="bulk-more" ref={bulkMenuRef}>
                 <button
                   className="secondary-button"
-                  disabled={!selectedIds.size || bulkFlag.isPending}
+                  disabled={!selectedIds.size || bulkUpdate.isPending}
                   onClick={() => setBulkMenuOpen((value) => !value)}
                   aria-expanded={bulkMenuOpen}
                 >
@@ -461,10 +445,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
                 </button>
                 {bulkMenuOpen && (
                   <div className="bulk-more-popover">
-                    <button onClick={() => { setBulkMenuOpen(false); bulkFlag.mutate({ ids: selectedItems.map((item) => item.id), data: { is_abandoned: true } }) }}><Ban />Abandon selected</button>
-                    <button onClick={() => { setBulkMenuOpen(false); bulkFlag.mutate({ ids: selectedItems.map((item) => item.id), data: { is_abandoned: false } }) }}><RotateCcw />Restore selected</button>
-                    <button onClick={() => { setBulkMenuOpen(false); bulkFlag.mutate({ ids: selectedItems.map((item) => item.id), data: { workflow_terminated: true } }) }}><OctagonX />Terminate workflows</button>
-                    <button onClick={() => { setBulkMenuOpen(false); bulkFlag.mutate({ ids: selectedItems.map((item) => item.id), data: { workflow_terminated: false } }) }}><RotateCcw />Reopen workflows</button>
+                    <button onClick={() => { setBulkMenuOpen(false); bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch: { is_abandoned: true } }) }}><Ban />Abandon selected</button>
+                    <button onClick={() => { setBulkMenuOpen(false); bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch: { is_abandoned: false } }) }}><RotateCcw />Restore selected</button>
+                    <button onClick={() => { setBulkMenuOpen(false); bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch: { workflow_terminated: true } }) }}><OctagonX />Terminate workflows</button>
+                    <button onClick={() => { setBulkMenuOpen(false); bulkUpdate.mutate({ ids: selectedItems.map((item) => item.id), patch: { workflow_terminated: false } }) }}><RotateCcw />Reopen workflows</button>
                   </div>
                 )}
               </div>

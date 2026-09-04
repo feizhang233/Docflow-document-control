@@ -60,7 +60,7 @@ export function SettingsPage() {
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a')
     a.href=url;a.download=`docflow-metadata-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);toast.success('Metadata backup exported')
   },onError:e=>toast.error(getApiError(e))})
-  const csvMutation=useMutation({mutationFn:()=>packagesApi.list({period:'all',page_size:200}),onSuccess:data=>{
+  const csvMutation=useMutation({mutationFn:()=>packagesApi.listAll({period:'all'}),onSuccess:data=>{
     const keys=['project_code','document_number','document_title','document_date','document_type','initiator','discipline','number_of_documents','transmittal_number','workflow_number','workflow_terminated','has_attachment','is_abandoned','notes'] as const
     const csv=[keys.join(','),...data.items.map(row=>keys.map(key=>`"${String(row[key]??'').replaceAll('"','""')}"`).join(','))].join('\n')
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=`docflow-documents-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast.success('Document CSV exported')
@@ -462,7 +462,7 @@ function ColumnConfigRow({config,onSaved}:{config:ColumnConfig;onSaved:()=>void}
   const remove=(option:string)=>{setActiveOptions(activeOptions.filter(value=>value!==option))}
   const dirty=name!==config.display_name||visible!==config.is_visible||width!==config.column_width||type!==config.input_type||JSON.stringify(options)!==JSON.stringify(config.options)||(poolField&&share!==(config.share_options!==false))||JSON.stringify(projectOptions)!==JSON.stringify(config.project_options||{})||JSON.stringify(optionColors)!==JSON.stringify(config.option_colors||{})||JSON.stringify(projectColors)!==JSON.stringify(config.project_option_colors||{})
   const saveDisabled=save.isPending||!name.trim()||(inputEditable&&type==='select'&&!activeOptions.length)||!dirty
-  return <article className={`column-card ${poolField?'has-pool':''} ${dirty?'is-dirty':''} ${visible?'':'is-hidden'}`}>
+  return <article className={`column-card ${dirty?'is-dirty':''} ${visible?'':'is-hidden'}`}>
     <header className="column-card-head">
       <div className="config-name"><strong>{config.display_name}</strong><code>{config.field_name}</code></div>
       {dirty&&<em className="column-dirty">Unsaved</em>}

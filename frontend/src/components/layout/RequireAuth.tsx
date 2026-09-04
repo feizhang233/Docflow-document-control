@@ -3,6 +3,7 @@ import { LoaderCircle, ShieldCheck } from 'lucide-react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { getApiError } from '../../lib/api'
 import { SecretInput } from '../common/SecretInput'
+import { ModalLayer } from '../common/ModalLayer'
 import { useAuth } from '../../hooks/useAuth'
 
 export function RequireAuth() {
@@ -40,9 +41,7 @@ export function RequireAuth() {
   return (
     <>
       <Outlet />
-      {user.must_change_password && !user.password_locked && (
-        <div className="modal-layer password-gate">
-          <div className="modal-backdrop" />
+      <ModalLayer open={user.must_change_password && !user.password_locked} onClose={() => undefined} label="Change your password" closeOnBackdrop={false} closeOnEscape={false}>
           <form className="editor-modal password-gate-card" onSubmit={submit} noValidate>
             <header>
               <div>
@@ -64,8 +63,7 @@ export function RequireAuth() {
               <button className="primary-button" type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <ShieldCheck size={16} />} Update password</button>
             </footer>
           </form>
-        </div>
-      )}
+      </ModalLayer>
     </>
   )
 }

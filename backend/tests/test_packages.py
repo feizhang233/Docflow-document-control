@@ -155,7 +155,13 @@ def test_duplicate_and_lifecycle_metadata(client):
     assert duplicate.json()["workflow_number"] is None
     updated=client.patch(f"/api/packages/{created['id']}",json={"notes":"Stopped by client instruction.","has_attachment":True,"is_abandoned":True,"workflow_terminated":True})
     assert updated.status_code==200
-    assert updated.json()["has_attachment"] is True and updated.json()["is_abandoned"] is True
+    body=updated.json()
+    assert body["has_attachment"] is True and body["is_abandoned"] is True
+    assert body["workflow_terminated"] is True and body["feedback"]["Terminate"] is True
+    reopened=client.patch(f"/api/packages/{created['id']}",json={"feedback":{**body["feedback"],"Terminate":False}})
+    assert reopened.status_code==200
+    assert reopened.json()["workflow_terminated"] is False
+    assert reopened.json()["feedback"]["Terminate"] is False
 
 def test_assigning_workflow_number_completes_submission_progress(client):
     data = payload("DOC-WF-AUTO")

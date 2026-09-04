@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, CheckCircle2, Clock3, FileCheck2, Files, History, ListChecks, MessageSquareText, Radio, Send, TrendingUp } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -34,14 +35,14 @@ export function DashboardPage() {
   const utiberCompleted=items.filter(item=>!item.feedback.Terminate&&!approvalFinished(item,gdsReviewer)&&approvalFinished(item,utiberReviewer)).length
   const awaitingApproval=items.length-terminated-gdsCompleted-utiberCompleted
   const overviewRows=[
-    {label:'GDS completed',count:gdsCompleted,color:'#32a87b'},
-    {label:'UTIBER completed and Waiting GDS',count:utiberCompleted,color:'#4974e9'},
-    {label:'Awaiting Utiber',count:awaitingApproval,color:'#e0a044'},
+    {label:`${gdsReviewer} completed`,count:gdsCompleted,color:'#32a87b'},
+    {label:`${utiberReviewer} completed and waiting ${gdsReviewer}`,count:utiberCompleted,color:'#4974e9'},
+    {label:`Awaiting ${utiberReviewer}`,count:awaitingApproval,color:'#e0a044'},
     {label:'Terminate',count:terminated,color:'#858d99'},
   ]
   let overviewOffset=0
   const overviewGradient=items.length?`conic-gradient(${overviewRows.map(row=>{const start=overviewOffset;overviewOffset+=row.count/items.length*100;return `${row.color} ${start}% ${overviewOffset}%`}).join(',')})`:'#e7ebf1'
-  const pending=items.filter(item=>!item.is_abandoned&&!item.workflow_terminated&&!item.feedback.Terminate&&!stepsFor(item).every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,stepsFor(right))-completedSteps(left,stepsFor(left))).slice(0,8)
+  const pending=items.filter(item=>!item.is_abandoned&&!item.workflow_terminated&&!stepsFor(item).every(step=>item.submission_progress[step])).sort((left,right)=>completedSteps(right,stepsFor(right))-completedSteps(left,stepsFor(left))).slice(0,8)
   const today=new Date()
   const packageForNotification=(notification:WorkflowNotification)=>items.find(item=>item.id===notification.package_id)||items.find(item=>item.workflow_number===notification.workflow_number&&item.document_number===notification.document_number)
   const todayChanges=(notifications?.items||[]).filter(item=>new Date(item.created_at).toDateString()===today.toDateString()&&(selectedProject==='ALL'||!!packageForNotification(item)))
@@ -61,12 +62,14 @@ export function DashboardPage() {
   const dateLabel=today.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
   const registerSearch=(project:ProjectFilter=selectedProject,extra:Record<string,string>={})=>{const params=new URLSearchParams(extra);if(project!=='ALL')params.set('project',project);return params.toString()?`?${params}`:''}
   const firstName=user?.display_name?.trim().split(/\s+/)[0]||'there'
+  const hour=today.getHours()
+  const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening'
   return <>
     <section className="dashboard-hero">
       <div className="dashboard-hero-copy">
         <div className="breadcrumb">{dateLabel} <span>/</span> {labels[selectedProject]}</div>
         <span className="hero-live"><Radio /> Live control room</span>
-        <h1>Good morning, {firstName}.</h1>
+        <h1>{greeting}, {firstName}.</h1>
         <p>Here is the document route that needs attention across {labels[selectedProject].toLowerCase()}.</p>
         <Link className="primary-button" to={`/documents/week${registerSearch()}`}>Open register <ArrowRight size={16}/></Link>
       </div>
@@ -103,13 +106,13 @@ export function DashboardPage() {
 }
 
 function completedSteps(item:{submission_progress:Record<string,boolean>},steps:readonly string[]){return steps.filter(step=>item.submission_progress[step]).length}
-function Metric({icon,tone,label,value,note,index}:{icon:React.ReactNode;tone:string;label:string;value:number;note:string;index:number}){return <div className="metric-card stagger-item" style={{animationDelay:`${index*45}ms`}}><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div></div>}
+function Metric({icon,tone,label,value,note,index}:{icon:ReactNode;tone:string;label:string;value:number;note:string;index:number}){return <div className="metric-card stagger-item" style={{animationDelay:`${index*45}ms`}}><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div></div>}
 function notificationDestination(item:WorkflowNotification,packages:Package[]){
   const focus=item.document_number||item.workflow_number
   const current=packages.find(entry=>entry.id===item.package_id)||packages.find(entry=>entry.workflow_number===item.workflow_number&&entry.document_number===item.document_number)
   const params=new URLSearchParams({...(focus?{focus}:{}),notification:String(item.id),...(item.package_id?{package:String(item.package_id)}:{}),...(current?{project:current.project_code}:{})})
   return{pathname:item.notification_type==='submission_progress'?'/documents/all':'/workflow',search:`?${params}`}
 }
-function ChangePanel({title,subtitle,items,icon,empty,detail,destination}:{title:string;subtitle:string;items:WorkflowNotification[];icon:React.ReactNode;empty:string;detail:(item:WorkflowNotification)=>string;destination:(item:WorkflowNotification)=>ReturnType<typeof notificationDestination>}){
-  return <section className="panel dashboard-panel dashboard-change-panel"><div className="panel-heading"><div><h2>{title}</h2><p>{subtitle}</p></div><span className="trend"><History size={14}/> {items.length} today</span></div><div className="dashboard-list workflow-change-list">{items.map(item=><Link to={destination(item)} state={{notificationFocusNonce:item.id}} key={item.id}><div className="activity-icon green">{icon}</div><div><strong>{item.workflow_number||item.document_number||'Workflow not assigned'}</strong><span>{detail(item)}</span></div><div className="activity-meta"><strong>{new Date(item.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</strong><span>{item.document_number||'document'}</span></div></Link>)}{!items.length&&<div className="mini-empty"><History/>{empty}</div>}</div></section>
+function ChangePanel({title,subtitle,items,icon,empty,detail,destination}:{title:string;subtitle:string;items:WorkflowNotification[];icon:ReactNode;empty:string;detail:(item:WorkflowNotification)=>string;destination:(item:WorkflowNotification)=>ReturnType<typeof notificationDestination>}){
+  return <section className="panel dashboard-panel dashboard-change-panel"><div className="panel-heading"><div><h2>{title}</h2><p>{subtitle}</p></div><span className="trend"><History size={14}/> {items.length} today</span></div><div className="dashboard-list workflow-change-list">{items.map(item=><Link to={destination(item)} key={item.id}><div className="activity-icon green">{icon}</div><div><strong>{item.workflow_number||item.document_number||'Workflow not assigned'}</strong><span>{detail(item)}</span></div><div className="activity-meta"><strong>{new Date(item.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</strong><span>{item.document_number||'document'}</span></div></Link>)}{!items.length&&<div className="mini-empty"><History/>{empty}</div>}</div></section>
 }

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
-from app.core.auth import get_current_user
+from app.core.auth import client_ip, get_current_user
 from app.core.security import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from app.db.session import get_db
 from app.models.iam import User
@@ -8,13 +8,6 @@ from app.schemas.iam import ChangePasswordRequest, LoginRequest, UserMe
 from app.services.iam_service import IamService, user_to_dict
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    return request.client.host if request.client else None
 
 
 def _proto(request: Request) -> str | None:
@@ -27,7 +20,7 @@ def login(data: LoginRequest, request: Request, response: Response, db: Session 
     user, access, refresh = service.authenticate(
         data.username,
         data.password,
-        ip=_ip(request),
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     set_auth_cookies(response, access=access, refresh=refresh, forwarded_proto=_proto(request))
@@ -42,7 +35,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
         raise HTTPException(status_code=401, detail="Not authenticated")
     user, access, refresh_value = IamService(db).rotate_refresh(
         token,
-        ip=_ip(request),
+        ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     set_auth_cookies(response, access=access, refresh=refresh_value, forwarded_proto=_proto(request))
@@ -63,7 +56,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
             user = db.get(IamUser, int(payload.get("sub")))
         except (InvalidTokenError, TypeError, ValueError):
             user = None
-    IamService(db).logout(token, user, ip=_ip(request))
+    IamService(db).logout(token, user, ip=client_ip(request))
     clear_auth_cookies(response, _proto(request))
     response.status_code = 204
 
@@ -76,8 +69,8 @@ def me(user: User = Depends(get_current_user)):
 @router.post("/change-password", response_model=UserMe)
 def change_password(data: ChangePasswordRequest, request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     service = IamService(db)
-    service.change_password(user, data.current_password, data.new_password, ip=_ip(request))
-    access, refresh_value = service.issue_session(user, ip=_ip(request), user_agent=request.headers.get("user-agent"))
+    service.change_password(user, data.current_password, data.new_password, ip=client_ip(request))
+    access, refresh_value = service.issue_session(user, ip=client_ip(request), user_agent=request.headers.get("user-agent"))
     service.db.commit()
     set_auth_cookies(response, access=access, refresh=refresh_value, forwarded_proto=_proto(request))
     db.refresh(user)

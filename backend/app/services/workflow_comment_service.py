@@ -82,7 +82,7 @@ class WorkflowCommentService:
             saved = self.replace_for_workflow_number(
                 item.workflow_number,
                 item.comments,
-                commit=True,
+                commit=False,
             )
             imported += 1
             results.append(
@@ -93,6 +93,7 @@ class WorkflowCommentService:
                 )
             )
 
+        self.db.commit()
         return WorkflowCommentsBulkImportResult(
             imported=imported,
             results=results,

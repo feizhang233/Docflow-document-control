@@ -59,7 +59,7 @@ export function NotificationsPopover({open,onToggle,onClose}:{open:boolean;onTog
                   if(!item.is_read)mark.mutate(item.id)
                   const focus=item.document_number||item.workflow_number
                   const queryString=new URLSearchParams({...(focus?{focus}:{}),notification:String(item.id),...(item.package_id?{package:String(item.package_id)}:{})})
-                  navigate(`${group.target}?${queryString}`,{state:{notificationFocusNonce:Date.now()}})
+                  navigate(`${group.target}?${queryString}`)
                   onClose()
                 }}><i/><div><strong>{item.title}</strong><p>{item.message}</p><span>{formatDistanceToNow(new Date(item.created_at),{addSuffix:true})}{item.document_number?` · ${item.document_number}`:''}</span></div></button>)}
               </section>

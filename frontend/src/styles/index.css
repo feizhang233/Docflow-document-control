@@ -574,7 +574,7 @@ button:not(:disabled), a[href], select:not(:disabled), input[type='checkbox']:no
 .editor-body { background: var(--color-surface-muted); scrollbar-gutter: stable; }
 .editor-modal>footer { position: sticky; bottom: 0; min-height: 66px; color: var(--color-text); border-top-color: var(--color-border); border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: color-mix(in srgb, var(--color-surface) 94%, transparent); backdrop-filter: blur(14px); }
 .modal-layer { position: fixed; inset: 0; z-index: var(--z-dialog); display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
-.drawer-layer { z-index: var(--z-sheet); }
+.drawer-layer { z-index: var(--z-dialog); }
 .modal-backdrop, .drawer-backdrop { background: rgba(10,15,25,.5); backdrop-filter: blur(4px); animation: backdropIn 180ms ease-out both; }
 .detail-drawer { color: var(--color-text); border-left: 1px solid var(--color-border); background: var(--color-surface-muted); box-shadow: var(--shadow-float); animation: drawerIn 260ms cubic-bezier(.22,1,.36,1) both; }
 .detail-drawer>header { color: var(--color-text); border-bottom-color: var(--color-border); background: var(--color-surface); }
@@ -582,7 +582,7 @@ button:not(:disabled), a[href], select:not(:disabled), input[type='checkbox']:no
 .detail-grid strong, .drawer-section h4 { color: var(--color-ink); }
 .detail-grid span, .section-heading span { color: var(--color-muted); }
 .detail-hero { background: linear-gradient(135deg, #172033, #253a66); }
-.confirm-layer { position: fixed; inset: 0; z-index: calc(var(--z-dialog) + 20); display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
+.confirm-layer { position: fixed; inset: 0; z-index: var(--z-command); display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 .confirm-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: rgba(9,14,24,.54); backdrop-filter: blur(4px); animation: backdropIn 180ms ease-out both; }
 .confirm-dialog { position: relative; width: min(480px, 100%); max-height: calc(100svh - 36px); overflow: auto; color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-float); animation: dialogIn 240ms cubic-bezier(.22,1,.36,1) both; }
 .confirm-dialog>header { display: grid; grid-template-columns: 44px 1fr 38px; gap: 13px; align-items: center; padding: 21px 21px 13px; }
@@ -665,7 +665,7 @@ html[data-theme='dark'] .settings-heading h2 { color: var(--color-ink); }
 @keyframes routeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes itemIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes popoverIn { from { opacity: 0; transform: translateY(-6px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes dialogIn { from { opacity: 0; transform: translate(-50%, -48%) scale(1.035); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes dialogIn { from { opacity: 0; transform: translateY(8px) scale(1.02); } to { opacity: 1; transform: none; } }
 @keyframes overlayIn { from { opacity: 0; transform: translateY(10px) scale(1.02); } to { opacity: 1; transform: none; } }
 @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drawerIn { from { opacity: .75; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
@@ -794,21 +794,14 @@ html[data-theme='dark'] .settings-heading h2 { color: var(--color-ink); }
 .synced-hscroll-thumb.is-full{cursor:default;opacity:.45;min-width:0}
 /* Hide native horizontal scrollbar on content; custom track is the only control. */
 .synced-hscroll-body,
-.synced-hscroll .table-scroll,
-.synced-hscroll .config-table-scroll-body{
+.synced-hscroll .table-scroll{
   overflow-x:auto;
   overflow-y:auto;
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
 .synced-hscroll-body::-webkit-scrollbar,
-.synced-hscroll .table-scroll::-webkit-scrollbar,
-.synced-hscroll .config-table-scroll-body::-webkit-scrollbar{display:none;height:0;width:0}
-.config-table-scroll{margin:0 0 4px}
-.config-table-scroll-body{overflow:auto}
-.config-table-block{min-width:950px}
-.config-table-scroll .config-list{overflow-x:visible}
-
+.synced-hscroll .table-scroll::-webkit-scrollbar{display:none;height:0;width:0}
 .project-config-editor{display:flex;flex-direction:column;gap:14px}
 .project-config-list{display:flex;flex-direction:column;gap:8px}
 .project-config-row{display:grid;grid-template-columns:30px 140px minmax(180px,1fr) 92px 36px;gap:8px;align-items:end}
@@ -843,20 +836,6 @@ html[data-theme='dark'] .settings-heading h2 { color: var(--color-ink); }
 .settings-panel .pool-project select{height:34px}
 .workflow-step-row button:last-child:hover:not(:disabled){background:#fff0f1;color:#b13f4c;border-color:#efc4c9}
 
-.login-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top left,#1b2d55,#111c35 52%)}
-.login-card{width:min(420px,100%);background:white;border-radius:16px;padding:32px 28px;box-shadow:0 24px 70px rgba(7,14,32,.28);display:flex;flex-direction:column;gap:14px}
-.login-brand{display:flex;align-items:center;gap:12px;color:#15233e}
-.login-brand .brand-mark{width:40px;height:40px;border-radius:11px;background:linear-gradient(145deg,#5583ff,#285ce2);color:white;display:grid;place-items:center;font:700 16px Manrope}
-.login-brand strong,.login-brand span{display:block}
-.login-brand strong{font:700 18px Manrope}
-.login-brand span{font-size:11px;color:#8290aa;letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
-.login-card h1{margin:8px 0 0;font:700 26px Manrope;color:#15233e}
-.login-card p{margin:0;color:#718096;font-size:13px;line-height:1.5}
-.login-card label>span{display:block;font-size:11px;color:#5e6c81;font-weight:600;margin-bottom:6px}
-.login-card input{width:100%;height:42px;border:1px solid #dfe4eb;border-radius:8px;padding:0 12px;font-size:14px;color:#2f3e56}
-.login-card input:focus{border-color:#7e9cf0;box-shadow:0 0 0 3px #edf2ff;outline:0}
-.login-error{background:#fff1f2;color:#a92f3c;border-radius:8px;padding:10px 12px;font-size:12px}
-.login-card .primary-button{width:100%;height:44px;margin-top:4px}
 .auth-loading{min-height:100vh;display:grid;place-items:center;color:#718096;font-size:14px}
 .user-menu{position:relative}
 .user-chip-button{border:0;background:transparent;padding:0 14px 0 0;text-align:left}

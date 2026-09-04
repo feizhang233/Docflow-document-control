@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { initials, type AuthUser, type Role } from '../../types/iam'
 import { SecretInput } from '../common/SecretInput'
 import { ConfirmDialog } from '../common/ConfirmDialog'
+import { ModalLayer } from '../common/ModalLayer'
 
 const emptyCreate = {
   username: '',
@@ -170,8 +171,7 @@ function UserEditor({
     })
   }
   return (
-    <div className="modal-layer">
-      <div className="modal-backdrop" onClick={onClose} />
+    <ModalLayer open onClose={() => { if (toggleOpen) setToggleOpen(false); else onClose() }} label={mode === 'create' ? 'New user' : `Edit ${user?.display_name || 'user'}`}>
       <form className="editor-modal iam-editor" onSubmit={submit} noValidate>
         <header>
           <div>
@@ -239,7 +239,7 @@ function UserEditor({
         onClose={() => setToggleOpen(false)}
         onConfirm={() => toggleActive.mutateAsync()}
       />}
-    </div>
+    </ModalLayer>
   )
 }
 
@@ -251,8 +251,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: AuthUser; onClo
     onError: (error) => toast.error(getApiError(error)),
   })
   return (
-    <div className="modal-layer">
-      <div className="modal-backdrop" onClick={onClose} />
+    <ModalLayer open onClose={onClose} label="Reset password">
       <form className="editor-modal password-gate-card" noValidate onSubmit={(event) => { event.preventDefault(); reset.mutate() }}>
         <header>
           <div>
@@ -272,7 +271,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: AuthUser; onClo
           <button className="primary-button" type="submit" disabled={reset.isPending}>{reset.isPending ? <LoaderCircle className="spin" /> : <KeyRound size={16} />} Reset password</button>
         </footer>
       </form>
-    </div>
+    </ModalLayer>
   )
 }
 
