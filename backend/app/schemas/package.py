@@ -18,8 +18,6 @@ def merge_submission_steps(steps: list[str]) -> list[str]:
         if MERGED_SUBMISSION_STEP not in merged:
             merged.insert(min(index, len(merged)), MERGED_SUBMISSION_STEP)
         return merged
-    if len(cleaned) == 5:
-        return [cleaned[0], cleaned[1], MERGED_SUBMISSION_STEP, cleaned[4]]
     return cleaned
 
 def merge_submission_progress(progress: dict[str, bool] | None) -> dict[str, bool]:

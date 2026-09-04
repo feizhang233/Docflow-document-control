@@ -62,17 +62,13 @@ class UserRead(BaseModel):
     updated_at: datetime
 
 
-class UserMe(UserRead):
-    pass
-
-
 class UserList(BaseModel):
     items: list[UserRead]
     total: int
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=32)
+    username: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=200)
 
 

@@ -444,6 +444,35 @@ def test_legacy_signature_and_initiation_merge_into_workflow_prepare(client):
     assert remapped.status_code == 200
     assert remapped.json()["submission_steps"] == ["Transmittal Preparation", "DCO Backup", "Workflow Prepare", "Email Feedback"]
 
+def test_five_custom_submission_steps_are_kept(client):
+    current = client.get("/api/settings/workflow").json()
+    steps = ["Prepare pack", "Internal check", "Client issue", "Comment close", "Archive"]
+    saved = client.put("/api/settings/workflow", json={
+        "submission_steps": steps,
+        "feedback_reviewers": current["feedback_reviewers"],
+        "feedback_status_labels": current["feedback_status_labels"],
+        "feedback_status_colors": current["feedback_status_colors"],
+        "transmittal_prefixes": current["transmittal_prefixes"],
+    })
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["submission_steps"] == steps
+    created = client.post("/api/packages", json=payload("DOC-FIVE-001")).json()
+    assert list(created["submission_progress"]) == steps
+
+def test_create_uses_current_feedback_reviewers(client):
+    current = client.get("/api/settings/workflow").json()
+    renamed = client.put("/api/settings/workflow", json={
+        "submission_steps": current["submission_steps"],
+        "feedback_reviewers": ["Reviewer One", "Reviewer Two"],
+        "feedback_status_labels": current["feedback_status_labels"],
+        "feedback_status_colors": current["feedback_status_colors"],
+        "transmittal_prefixes": current["transmittal_prefixes"],
+    })
+    assert renamed.status_code == 200
+    created = client.post("/api/packages", json=payload("DOC-REV-001")).json()
+    assert set(created["feedback"]) == {"Reviewer One", "Reviewer Two", "Terminate"}
+    assert created["feedback_status"] == {"Reviewer One": "P", "Reviewer Two": "P"}
+
 def test_blank_document_number_creates_draft(client):
     data = payload("")
     data.update({"document_type":"", "initiator":"", "discipline":""})

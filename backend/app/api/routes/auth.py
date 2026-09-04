@@ -4,7 +4,7 @@ from app.core.auth import client_ip, get_current_user
 from app.core.security import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from app.db.session import get_db
 from app.models.iam import User
-from app.schemas.iam import ChangePasswordRequest, LoginRequest, UserMe
+from app.schemas.iam import ChangePasswordRequest, LoginRequest, UserRead
 from app.services.iam_service import IamService, user_to_dict
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -14,7 +14,7 @@ def _proto(request: Request) -> str | None:
     return request.headers.get("x-forwarded-proto") or request.url.scheme
 
 
-@router.post("/login", response_model=UserMe)
+@router.post("/login", response_model=UserRead)
 def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     service = IamService(db)
     user, access, refresh = service.authenticate(
@@ -27,7 +27,7 @@ def login(data: LoginRequest, request: Request, response: Response, db: Session 
     return user_to_dict(user)
 
 
-@router.post("/refresh", response_model=UserMe)
+@router.post("/refresh", response_model=UserRead)
 def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.cookies.get(REFRESH_COOKIE)
     if not token:
@@ -61,12 +61,12 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     response.status_code = 204
 
 
-@router.get("/me", response_model=UserMe)
+@router.get("/me", response_model=UserRead)
 def me(user: User = Depends(get_current_user)):
     return user_to_dict(user)
 
 
-@router.post("/change-password", response_model=UserMe)
+@router.post("/change-password", response_model=UserRead)
 def change_password(data: ChangePasswordRequest, request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     service = IamService(db)
     service.change_password(user, data.current_password, data.new_password, ip=client_ip(request))

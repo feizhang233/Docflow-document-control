@@ -4,9 +4,9 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.repositories.package_repository import PackageRepository
-from app.schemas.package import PackageCreate, PackageUpdate, TransmittalSeries, TransmittalSuggestions, TransmittalUse
+from app.schemas.package import PackageCreate, PackageUpdate, TransmittalSeries, TransmittalSuggestions, TransmittalUse, merge_submission_progress
 from app.services.notification_service import NotificationService, describe_submission_progress, describe_workflow_update
-from app.services.settings_service import SettingsService
+from app.services.settings_service import SettingsService, remap_submission_progress
 from app.services.transmittal import suggestions_for_project
 
 class PackageService:
@@ -18,6 +18,9 @@ class PackageService:
         if not values["document_number"].strip():
             values["document_number"] = f"DRAFT-{date.today():%Y%m%d}-{uuid4().hex[:8].upper()}"
         values["submission_progress"] = self._progress_for_project(values["project_code"], values.get("submission_progress"))
+        values["feedback"], values["feedback_status"] = self._feedback_for_workflow(
+            settings.get_workflow_config(), values.get("feedback"), values.get("feedback_status"),
+        )
         return self.repo.create(values)
     def update(self, package_id: int, data: PackageUpdate):
         item = self.require(package_id)
@@ -34,7 +37,6 @@ class PackageService:
         if newly_assigned_workflow and "submission_progress" not in values:
             values["submission_progress"] = {step: True for step in settings.submission_steps_for(target_project)}
         elif "project_code" in values and values["project_code"] != item.project_code and "submission_progress" not in values:
-            from app.services.settings_service import remap_submission_progress
             values["submission_progress"] = remap_submission_progress(
                 item.submission_progress,
                 settings.submission_steps_for(item.project_code),
@@ -74,9 +76,22 @@ class PackageService:
                 ),
             )
         return updated
+    def _feedback_for_workflow(self, workflow, feedback: dict | None, feedback_status: dict | None):
+        reviewers = list(workflow.feedback_reviewers)
+        current_feedback = dict(feedback or {})
+        current_status = dict(feedback_status or {})
+        previous = [key for key in current_feedback if key != "Terminate"]
+        mapped_feedback = {
+            reviewer: bool(current_feedback.get(previous[index] if index < len(previous) else reviewer, False))
+            for index, reviewer in enumerate(reviewers)
+        }
+        mapped_feedback["Terminate"] = bool(current_feedback.get("Terminate", False))
+        mapped_status = {
+            reviewer: current_status.get(previous[index] if index < len(previous) else reviewer, current_status.get(reviewer, "P"))
+            for index, reviewer in enumerate(reviewers)
+        }
+        return mapped_feedback, mapped_status
     def _progress_for_project(self, project_code: str, progress: dict | None):
-        from app.schemas.package import merge_submission_progress
-        from app.services.settings_service import remap_submission_progress
         steps = SettingsService(self.repo.db).submission_steps_for(project_code)
         current = merge_submission_progress(progress)
         if all(step in current for step in steps):
@@ -96,8 +111,7 @@ class PackageService:
         return item
     def duplicate(self, package_id: int):
         item = self.require(package_id)
-        # Keep the same document number: revisions/submissions may share it.
-        # Append -COPY only as a visual cue that this is a cloned register row.
+        # Revisions may share a number; -COPY marks the cloned register row.
         number = f"{item.document_number}-COPY"
         values = {
             "project_code": item.project_code, "document_number": number, "document_title": item.document_title, "document_date": item.document_date, "document_type": item.document_type,

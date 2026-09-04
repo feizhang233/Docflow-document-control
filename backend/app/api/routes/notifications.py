@@ -21,15 +21,15 @@ def list_notifications(
     return NotificationList(items=items, unread_count=unread)
 
 @router.patch("/read-all", status_code=204)
-def mark_all_read(db: Session = Depends(get_db), _: User = Depends(require_permission("notifications:read"))):
-    NotificationService(db).mark_all_read(); return Response(status_code=204)
+def mark_all_read(db: Session = Depends(get_db), user: User = Depends(require_permission("notifications:read"))):
+    NotificationService(db).mark_all_read(allowed_projects=project_scope(user)); return Response(status_code=204)
 
 @router.delete("", status_code=204)
-def clear_notifications(db: Session = Depends(get_db), _: User = Depends(require_permission("notifications:write"))):
-    NotificationService(db).clear_all(); return Response(status_code=204)
+def clear_notifications(db: Session = Depends(get_db), user: User = Depends(require_permission("notifications:write"))):
+    NotificationService(db).clear_all(allowed_projects=project_scope(user)); return Response(status_code=204)
 
 @router.patch("/{notification_id}/read", response_model=NotificationRead)
-def mark_read(notification_id: int, db: Session = Depends(get_db), _: User = Depends(require_permission("notifications:read"))):
-    item = NotificationService(db).mark_read(notification_id)
+def mark_read(notification_id: int, db: Session = Depends(get_db), user: User = Depends(require_permission("notifications:read"))):
+    item = NotificationService(db).mark_read(notification_id, allowed_projects=project_scope(user))
     if not item: raise HTTPException(status_code=404, detail="Notification not found")
     return item

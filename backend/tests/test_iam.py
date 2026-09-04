@@ -19,6 +19,45 @@ def test_external_api_key_can_read_workflow_settings(anon_client):
     assert allowed.json()["feedback_reviewers"] == ["UTIBER", "GDS"]
 
 
+def test_login_accepts_long_email(client, anon_client):
+    email = "document.controller.long.name@example-project.example"
+    assert len(email) > 32
+    created = client.post("/api/iam/users", json={
+        "username": "longmail",
+        "display_name": "Long Email",
+        "email": email,
+        "password": "viewer-pass-1",
+        "role_slugs": ["viewer"],
+        "all_projects": True,
+    })
+    assert created.status_code == 201, created.text
+    login(anon_client, email, "viewer-pass-1")
+    me = anon_client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["username"] == "longmail"
+
+
+def test_project_scoped_user_cannot_clear_other_project_notifications(client, anon_client):
+    from tests.test_packages import payload
+    nfs = client.post("/api/packages", json=payload("NFS-NOTE-001")).json()
+    client.patch(f"/api/packages/{nfs['id']}", json={"workflow_terminated": True})
+    created = client.post("/api/iam/users", json={
+        "username": "fstnotify",
+        "display_name": "FST Notify",
+        "password": "editor-pass-1",
+        "role_slugs": ["editor"],
+        "all_projects": False,
+        "project_codes": ["FST"],
+    })
+    assert created.status_code == 201, created.text
+    login(anon_client, "fstnotify", "editor-pass-1")
+    assert anon_client.get("/api/notifications").json()["items"] == []
+    assert anon_client.delete("/api/notifications").status_code == 204
+    remaining = client.get("/api/notifications").json()
+    assert remaining["items"]
+    assert remaining["items"][0]["package_id"] == nfs["id"]
+
+
 def test_login_me_and_logout(anon_client):
     failed = anon_client.post("/api/auth/login", json={"username": ADMIN_USERNAME, "password": "wrong-password-1"})
     assert failed.status_code == 401
