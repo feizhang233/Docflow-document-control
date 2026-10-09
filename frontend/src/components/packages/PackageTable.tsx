@@ -40,6 +40,8 @@ interface Props {
   onDelete: (item: Package) => void | Promise<unknown>
   canWrite?: boolean
   canDelete?: boolean
+  canWriteProject?: (code: string) => boolean
+  canDeleteProject?: (code: string) => boolean
 }
 
 const styleFor = (config?: ColumnConfig): CSSProperties | undefined =>
@@ -211,7 +213,7 @@ function RowMenu({
 
 function SortableRow({
   item, highlighted, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
-  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, onKeyboardMove, canWrite = true, canDelete = true,
+  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, onKeyboardMove, canWrite = true, canDelete = true, canReorder = true,
 }: {
   item: Package
   highlighted: boolean
@@ -232,13 +234,14 @@ function SortableRow({
   onToggleAbandoned: Props['onToggleAbandoned']
   onToggleTerminate: Props['onToggleTerminate']
   onDelete: Props['onDelete']
-  onKeyboardMove?: (id: number, direction: -1 | 1) => void
+  onKeyboardMove: (id: number, direction: -1 | 1) => void
   canWrite?: boolean
   canDelete?: boolean
+  canReorder?: boolean
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canWrite })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canReorder })
   const style = { transform: CSS.Transform.toString(transform), transition }
-  const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_number'
+  const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : 'transmittal_number'
   const first = item[primaryField]
   const config = (field: ColumnField) => configs.find((entry) => entry.field_name === field)
   const shown = (field: ColumnField) => {
@@ -262,31 +265,31 @@ function SortableRow({
         </td>
       ) : (
         <td className="drag-cell">
-          {canWrite ? (
+          {canReorder ? (
             <button
               type="button"
+              disabled={!canReorder}
               {...attributes}
               {...listeners}
               aria-label="Drag to reorder. Use Alt and arrow keys for keyboard reordering."
               onKeyDown={(event) => {
                 if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
                 event.preventDefault()
-                onKeyboardMove?.(item.id, event.key === 'ArrowUp' ? -1 : 1)
+                onKeyboardMove(item.id, event.key === 'ArrowUp' ? -1 : 1)
               }}
             ><GripVertical size={16} /></button>
           ) : null}
         </td>
       )}
-      {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
-      {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
+      {kind !== 'documents' && shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
       {shown('document_title') && <td className="document-title-cell" style={styleFor(config('document_title'))}>{item.document_title || '—'}</td>}
       {shown('document_date') && <td className="mono-cell" style={styleFor(config('document_date'))}>{item.has_attachment ? <span className="attachment-label"><Paperclip /> Attachment</span> : item.document_date}</td>}
       {shown('document_type') && <td style={styleFor(config('document_type'))}><StatusBadge status={item.document_type} color={columnOptionColorsFor(config('document_type'), item.project_code)[item.document_type]} /></td>}
       {shown('initiator') && <td style={styleFor(config('initiator'))}><div className="person-cell"><span>{item.initiator.split(' ').map((s) => s[0]).join('').slice(0, 2)}</span>{item.initiator}</div></td>}
       {shown('discipline') && <td style={styleFor(config('discipline'))}>{item.discipline}</td>}
       {shown('number_of_documents') && <td className="number-cell" style={styleFor(config('number_of_documents'))}>{item.number_of_documents}</td>}
-      {primaryField !== 'transmittal_number' && shown('transmittal_number') && <td className="mono-cell" style={styleFor(config('transmittal_number'))}>{item.transmittal_number || '—'}</td>}
-      {primaryField !== 'workflow_number' && shown('workflow_number') && <td className="mono-cell" style={styleFor(config('workflow_number'))}>{item.workflow_number || '—'}</td>}
+      {(kind === 'documents' || primaryField !== 'transmittal_number') && shown('transmittal_number') && <td className="mono-cell" style={styleFor(config('transmittal_number'))}>{item.transmittal_number || '—'}</td>}
+      {(kind === 'documents' || primaryField !== 'workflow_number') && shown('workflow_number') && <td className="mono-cell" style={styleFor(config('workflow_number'))}>{item.workflow_number || '—'}</td>}
       {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionStepsFor?.(item.project_code) || submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={canWrite && onAdvance ? () => onAdvance(item) : undefined} /></td>}
       {shown('feedback') && <td className="progress-cell feedback" style={styleFor(config('feedback'))}><FeedbackStatus item={item} reviewers={feedbackReviewers} statusLabels={feedbackStatusLabels} statusColors={feedbackStatusColors} compact /></td>}
       <td className="action-cell">
@@ -302,17 +305,18 @@ export function PackageTable({
   items, highlightedPackageId, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
   sortBy, sortOrder, selectionMode = false, selectedIds, onToggleSelect, onToggleSelectAll,
   onSort, onColumnResize, onView, onEdit, onReorder, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete,
-  canWrite = true, canDelete = true,
+  canWrite = true, canDelete = true, canWriteProject, canDeleteProject,
 }: Props) {
   const [widths, setWidths] = useState<Record<string, number>>({})
   useEffect(() => setWidths(Object.fromEntries(configs.map((item) => [item.field_name, item.column_width]))), [configs])
-  const layoutConfigs = useMemo(() => configs.map((item) => ({ ...item, column_width: widths[item.field_name] ?? item.column_width })), [configs, widths])
+  const layoutConfigs = useMemo(() => configs.filter(item => item.field_name !== 'document_number').map((item) => ({ ...item, column_width: widths[item.field_name] ?? item.column_width })), [configs, widths])
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const ids = useMemo(() => items.map((i) => i.id), [items])
+  const canReorder = canWrite && items.every(item => !canWriteProject || canWriteProject(item.project_code))
   const allSelected = items.length > 0 && items.every((item) => selectedIds?.has(item.id))
   const someSelected = items.some((item) => selectedIds?.has(item.id)) && !allSelected
   const dragEnd = ({ active, over }: DragEndEvent) => {
-    if (selectionMode || !over || active.id === over.id) return
+    if (!canReorder || selectionMode || !over || active.id === over.id) return
     const from = ids.indexOf(Number(active.id))
     const to = ids.indexOf(Number(over.id))
     const next = [...ids]
@@ -320,6 +324,7 @@ export function PackageTable({
     onReorder(next)
   }
   const keyboardMove = (id: number, direction: -1 | 1) => {
+    if (!canReorder) return
     const from = ids.indexOf(id)
     const to = from + direction
     if (from < 0 || to < 0 || to >= ids.length) return
@@ -327,7 +332,7 @@ export function PackageTable({
     ;[next[from], next[to]] = [next[to], next[from]]
     onReorder(next)
   }
-  const primary = kind === 'workflow' ? ['Workflow Number', 'workflow_number'] : kind === 'transmittal' ? ['Transmittal Number', 'transmittal_number'] : ['Document Number', 'document_number']
+  const primary = kind === 'workflow' ? ['Workflow Number', 'workflow_number'] : ['Transmittal Number', 'transmittal_number']
   const primaryField = primary[1] as ColumnField
   const config = (field: ColumnField) => layoutConfigs.find((item) => item.field_name === field)
   const shown = (field: ColumnField) => {
@@ -371,16 +376,15 @@ export function PackageTable({
               ) : (
                 <th className="drag-cell" scope="col"><span className="sr-only">Reorder</span></th>
               )}
-              {shown(primaryField) && <Header label={label(primaryField, primary[0])} field={primaryField} config={config(primaryField)} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {kind !== 'documents' && shown('document_number') && <Header label={label('document_number', 'Document Number')} field="document_number" config={config('document_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
+              {kind !== 'documents' && shown(primaryField) && <Header label={label(primaryField, primary[0])} field={primaryField} config={config(primaryField)} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('document_title') && <Header label={label('document_title', 'Document Title')} field="document_title" config={config('document_title')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('document_date') && <Header label={label('document_date', 'Date')} field="document_date" config={config('document_date')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('document_type') && <Header label={label('document_type', 'Document Type')} field="document_type" config={config('document_type')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('initiator') && <Header label={label('initiator', 'Initiator')} field="initiator" config={config('initiator')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('discipline') && <Header label={label('discipline', 'Discipline')} field="discipline" config={config('discipline')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('number_of_documents') && <Header label={label('number_of_documents', 'Docs')} field="number_of_documents" config={config('number_of_documents')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {primaryField !== 'transmittal_number' && shown('transmittal_number') && <Header label={label('transmittal_number', 'Transmittal No.')} field="transmittal_number" config={config('transmittal_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {primaryField !== 'workflow_number' && shown('workflow_number') && <Header label={label('workflow_number', 'Workflow No.')} field="workflow_number" config={config('workflow_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
+              {(kind === 'documents' || primaryField !== 'transmittal_number') && shown('transmittal_number') && <Header label={label('transmittal_number', 'Transmittal No.')} field="transmittal_number" config={config('transmittal_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
+              {(kind === 'documents' || primaryField !== 'workflow_number') && shown('workflow_number') && <Header label={label('workflow_number', 'Workflow No.')} field="workflow_number" config={config('workflow_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('submission_progress') && <Header label={label('submission_progress', 'Submission Progress')} config={config('submission_progress')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               {shown('feedback') && <Header label={label('feedback', 'Feedback')} config={config('feedback')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
               <th scope="col"><span className="sr-only">Actions</span></th>
@@ -396,7 +400,10 @@ export function PackageTable({
                   selected={!!selectedIds?.has(item.id)}
                   onToggleSelect={onToggleSelect}
                   onKeyboardMove={keyboardMove}
-                  {...{ item, kind, configs: layoutConfigs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, canWrite, canDelete }}
+                  {...{ item, kind, configs: layoutConfigs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete }}
+                  canWrite={canWrite && (!canWriteProject || canWriteProject(item.project_code))}
+                  canDelete={canDelete && (!canDeleteProject || canDeleteProject(item.project_code))}
+                  canReorder={canReorder}
                 />
               ))}
             </tbody>

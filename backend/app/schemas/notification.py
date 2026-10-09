@@ -5,6 +5,7 @@ from app.schemas.package import FEEDBACK_STATUS_VALUES
 class NotificationRead(BaseModel):
     id: int
     package_id: int | None
+    project_code: str | None = None
     notification_type: str
     title: str
     message: str

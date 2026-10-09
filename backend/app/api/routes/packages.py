@@ -1,7 +1,7 @@
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
-from app.core.auth import assert_project_access, project_scope, require_permission
+from app.core.auth import assert_project_access, assert_project_permission, project_scope, require_permission
 from app.db.session import get_db
 from app.models.iam import User
 from app.repositories.package_repository import PackageRepository
@@ -43,21 +43,26 @@ def list_workflow_comments(package_id:int, db:Session=Depends(get_db), user: Use
     return WorkflowCommentList(items=items, total=len(items))
 @router.post("", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
 def create_package(data:PackageCreate, db:Session=Depends(get_db), user: User=Depends(require_permission("packages:write"))):
-    assert_project_access(user, data.project_code)
+    assert_project_permission(user, data.project_code, "packages:write")
     return PackageService(db).create(data)
 @router.post("/{package_id}/duplicate", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
 def duplicate_package(package_id:int, db:Session=Depends(get_db), user: User=Depends(require_permission("packages:write"))):
-    _visible_package(package_id, db, user)
+    item = _visible_package(package_id, db, user)
+    assert_project_permission(user, item.project_code, "packages:write")
     return PackageService(db).duplicate(package_id)
 @router.patch("/{package_id}", response_model=PackageRead)
 def update_package(package_id:int,data:PackageUpdate,db:Session=Depends(get_db), user: User=Depends(require_permission("packages:write"))):
     item = _visible_package(package_id, db, user)
+    assert_project_permission(user, item.project_code, "packages:write")
     if data.project_code:
-        assert_project_access(user, data.project_code)
+        assert_project_permission(user, data.project_code, "packages:write")
     return PackageService(db).update(item.id, data)
 @router.delete("/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_package(package_id:int,db:Session=Depends(get_db), user: User=Depends(require_permission("packages:delete"))):
-    item=_visible_package(package_id, db, user); PackageService(db).repo.delete(item); return Response(status_code=204)
+    item = _visible_package(package_id, db, user)
+    assert_project_permission(user, item.project_code, "packages:delete")
+    PackageService(db).repo.delete(item)
+    return Response(status_code=204)
 @router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT)
 def reorder_packages(data:ReorderRequest,db:Session=Depends(get_db), user: User=Depends(require_permission("packages:write"))):
     repo = PackageRepository(db)
@@ -65,6 +70,6 @@ def reorder_packages(data:ReorderRequest,db:Session=Depends(get_db), user: User=
     if len(items) != len(set(data.package_ids)):
         raise HTTPException(status_code=400,detail="One or more package IDs do not exist")
     for item in items.values():
-        assert_project_access(user, item.project_code)
+        assert_project_permission(user, item.project_code, "packages:write")
     repo.reorder(data.package_ids, data.start_index)
     return Response(status_code=204)

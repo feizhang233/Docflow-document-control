@@ -1,8 +1,9 @@
-import { BarChart3, Building2, ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, Repeat2, Send, Settings, X } from 'lucide-react'
+import { BarChart3, Bell, Building2, ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, Repeat2, Send, Settings, X } from 'lucide-react'
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useProjects } from '../../hooks/useProjects'
+import { useWorkspaceAccess } from '../../hooks/useWorkspaceAccess'
 import { projectFilterFrom } from '../../lib/projects'
 import type { ProjectFilter } from '../../types/package'
 import { LogoMark } from '../common/LogoMark'
@@ -19,7 +20,8 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
   const [searchParams]=useSearchParams()
   const {codes,labels,canSeeAll}=useProjects()
   const {can}=useAuth()
-  const showSettings=can('settings:write')||can('metadata:export')||can('metadata:import')||can('iam:read')
+  const {viewOnly}=useWorkspaceAccess()
+  const showSettings=!viewOnly&&(can('settings:write')||can('metadata:export')||can('metadata:import')||can('iam:read'))
   const selectedProject=projectFilterFrom(searchParams.get('project'),codes,canSeeAll)
   const documentsActive=location.pathname.startsWith('/documents')
   const projectUrl=(url:string)=>selectedProject==='ALL'?url:`${url}?project=${selectedProject}`
@@ -47,7 +49,7 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
         >{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</button>
       </div>
       <nav className="nav-list" id="primary-navigation">
-        <NavLink to="/" end className="nav-item" onClick={onClose} aria-label="Dashboard" title={collapsed?'Dashboard':undefined}><BarChart3 size={18}/><span>Dashboard</span></NavLink>
+        <NavLink to={projectUrl('/')} end className="nav-item" onClick={onClose} aria-label="Dashboard" title={collapsed?'Dashboard':undefined}><BarChart3 size={18}/><span>Dashboard</span></NavLink>
         <label className="project-switcher" title={collapsed?labels[selectedProject]:undefined}>
           <Building2 size={18}/>
           <span><small>Project</small><select aria-label="Select project" value={selectedProject} onChange={event=>changeProject(event.target.value as ProjectFilter)}>{canSeeAll&&<option value="ALL">All Projects</option>}{codes.map(code=><option key={code} value={code}>{code} · {labels[code]}</option>)}</select></span>
@@ -56,8 +58,9 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
           <div className={`nav-parent-row ${documentsActive?'active':''}`}><NavLink to={projectUrl('/documents/week')} className="nav-parent" onClick={onClose} aria-label="Documents" title={collapsed?'Documents':undefined}><FileText size={18}/><span>Documents</span></NavLink><button type="button" className="nav-collapse-button" aria-label={documentsOpen?'Collapse Documents':'Expand Documents'} aria-expanded={documentsOpen} onClick={()=>setDocumentsOpen(open=>!open)}><ChevronDown size={15}/></button></div>
           {documentsOpen&&<div className="nav-children">{documentLinks.map(([label, url]) => <NavLink key={url} to={projectUrl(url)} className="nav-child" onClick={onClose}>{label}</NavLink>)}</div>}
         </div>
-        <NavLink to={projectUrl('/workflow')} className="nav-item" onClick={onClose} aria-label="Workflow" title={collapsed?'Workflow':undefined}><Repeat2 size={18}/><span>Workflow</span></NavLink>
-        <NavLink to={projectUrl('/transmittal')} className="nav-item" onClick={onClose} aria-label="Transmittal" title={collapsed?'Transmittal':undefined}><Send size={18}/><span>Transmittal</span></NavLink>
+        {!viewOnly&&<NavLink to={projectUrl('/workflow')} className="nav-item" onClick={onClose} aria-label="Workflow" title={collapsed?'Workflow':undefined}><Repeat2 size={18}/><span>Workflow</span></NavLink>}
+        {!viewOnly&&<NavLink to={projectUrl('/transmittal')} className="nav-item" onClick={onClose} aria-label="Transmittal" title={collapsed?'Transmittal':undefined}><Send size={18}/><span>Transmittal</span></NavLink>}
+        <div className="sidebar-notification-region"><span className="sidebar-workspace-label">Updates</span><NavLink to={projectUrl('/notifications')} className="nav-item" onClick={onClose} aria-label="Notification" title={collapsed?'Notification':undefined}><Bell size={18}/><span>Notification</span></NavLink></div>
       </nav>
       <div className="sidebar-bottom">
         {showSettings&&<NavLink to="/settings" className="nav-item" onClick={onClose} aria-label="Settings" title={collapsed?'Settings':undefined}><Settings size={18}/><span>Settings</span></NavLink>}

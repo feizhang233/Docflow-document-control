@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -52,6 +52,7 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     password_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     all_projects: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    read_only_projects: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     session_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime)
@@ -66,6 +67,14 @@ class User(Base):
 
     def has_permission(self, code: str) -> bool:
         return code in self.permission_codes()
+
+    def can_in_project(self, code: str, project_code: str) -> bool:
+        allowed = self.allowed_projects()
+        if allowed is not None and project_code not in allowed:
+            return False
+        if project_code in (self.read_only_projects or []) and code in {"packages:write", "packages:delete", "notifications:write", "notifications:manage"}:
+            return False
+        return self.has_permission(code)
 
     def role_slugs(self) -> list[str]:
         return [role.slug for role in self.roles]

@@ -3,14 +3,17 @@ import { useRef, useState } from 'react'
 import { Bell, CheckCheck, ChevronDown, ListChecks, MessageSquareText, RefreshCw, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useDismissableLayer } from '../../hooks/useDismissableLayer'
 import { notificationsApi } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { ConfirmDialog } from '../common/ConfirmDialog'
+import { useWorkspaceAccess } from '../../hooks/useWorkspaceAccess'
+import { notificationDate, notificationDestination } from '../../lib/notifications'
 
 export function NotificationsPopover({open,onToggle,onClose}:{open:boolean;onToggle:()=>void;onClose:()=>void}){
   const navigate=useNavigate();const queryClient=useQueryClient();const {can}=useAuth()
+  const {viewOnly,project}=useWorkspaceAccess()
   const [collapsedGroups,setCollapsedGroups]=useState<Set<string>>(()=>new Set())
   const [clearOpen,setClearOpen]=useState(false)
   const panelRef=useRef<HTMLDivElement>(null)
@@ -24,7 +27,8 @@ export function NotificationsPopover({open,onToggle,onClose}:{open:boolean;onTog
   const items=query.data?.items||[]
   const groups=[
     {type:'submission_progress',label:'Submission Progress',icon:<ListChecks/>,items:items.filter(item=>item.notification_type==='submission_progress'),target:'/documents/all'},
-    {type:'workflow_feedback',label:'Workflow Feedback',icon:<MessageSquareText/>,items:items.filter(item=>item.notification_type!=='submission_progress'),target:'/workflow'},
+    {type:'workflow_feedback',label:'Workflow Feedback',icon:<MessageSquareText/>,items:items.filter(item=>item.notification_type==='workflow_feedback'),target:'/workflow'},
+    {type:'workflow_comments',label:'Comments',icon:<MessageSquareText/>,items:items.filter(item=>item.notification_type==='workflow_comments'),target:'/workflow'},
   ].filter(group=>group.items.length)
   const toggleGroup=(type:string)=>setCollapsedGroups(previous=>{const next=new Set(previous);if(next.has(type))next.delete(type);else next.add(type);return next})
   return <>
@@ -57,15 +61,13 @@ export function NotificationsPopover({open,onToggle,onClose}:{open:boolean;onTog
                 </button>
                 {!collapsed&&group.items.map(item=><button key={item.id} className={item.is_read?'':'unread'} onClick={()=>{
                   if(!item.is_read)mark.mutate(item.id)
-                  const focus=item.document_number||item.workflow_number
-                  const queryString=new URLSearchParams({...(focus?{focus}:{}),notification:String(item.id),...(item.package_id?{package:String(item.package_id)}:{})})
-                  navigate(`${group.target}?${queryString}`)
+                  navigate(notificationDestination(item,viewOnly||!can('packages:write',item.project_code||undefined)))
                   onClose()
-                }}><i/><div><strong>{item.title}</strong><p>{item.message}</p><span>{formatDistanceToNow(new Date(item.created_at),{addSuffix:true})}{item.document_number?` · ${item.document_number}`:''}</span></div></button>)}
+                }}><i/><div><strong>{item.title}</strong><p>{item.message}</p><span>{formatDistanceToNow(notificationDate(item.created_at),{addSuffix:true})}{item.document_number?` · ${item.document_number}`:''}</span></div></button>)}
               </section>
             })}
         </div>
-        <footer>Updates refresh automatically every 30 seconds.</footer>
+        <footer><Link to={project==='ALL'?'/notifications':`/notifications?project=${project}`} onClick={onClose}>View updates and notification emails</Link></footer>
       </div>,
       document.body,
     )}

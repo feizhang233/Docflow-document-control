@@ -139,6 +139,7 @@ export interface WorkflowConfig {
 export interface WorkflowNotification {
   id: number
   package_id: number | null
+  project_code: string | null
   notification_type: string
   title: string
   message: string

@@ -18,8 +18,21 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = ""
     bootstrap_admin_name: str = "Administrator"
     bootstrap_admin_email: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"
+    smtp_timeout_seconds: int = 15
+    email_poll_seconds: int = 30
+    public_app_url: str = ""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     @property
     def cors_origin_list(self) -> list[str]: return [v.strip() for v in self.cors_origins.split(",") if v.strip()]
+
+    @property
+    def mail_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from_email)
 
 settings = Settings()

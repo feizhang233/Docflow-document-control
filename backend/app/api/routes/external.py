@@ -87,30 +87,33 @@ def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Sess
     if data.feedback_status is not None and not set(data.feedback_status).issubset(config.feedback_reviewers):
         raise HTTPException(status_code=422, detail="Unknown feedback status reviewer")
 
-    updated_items = []
     for item in items:
         if data.submission_progress is not None and not set(data.submission_progress).issubset(settings_service.submission_steps_for(item.project_code)):
             raise HTTPException(status_code=422, detail="Unknown submission progress step")
+    updated_items = []
+    changed = False
+    for item in items:
         values = _values_for_package(item, data)
         if not values:
             continue
-        updated_items.append(repo.update(item, values))
+        changed = changed or any(getattr(item, key) != value for key, value in values.items())
+        updated_items.append(repo.update(item, values, commit=False))
     if not updated_items:
         raise HTTPException(status_code=400, detail="No workflow status fields supplied")
 
     # One notification on the primary (lowest-id) package is enough for the register bell.
     primary = updated_items[0]
     notifications = NotificationService(db)
-    if data.submission_progress is not None:
+    if changed and data.submission_progress is not None:
         notifications.create_submission_progress_update(
-            package_id=primary.id,
+            package_id=primary.id, commit=False,
             workflow_number=workflow_number,
             document_number=primary.document_number,
             message=combine_update_message(data.message, describe_submission_progress(data.submission_progress)),
         )
-    if data.feedback is not None or data.feedback_status is not None or data.terminate_workflow is not None:
+    if changed and (data.feedback is not None or data.feedback_status is not None or data.terminate_workflow is not None):
         notifications.create_workflow_feedback_update(
-            package_id=primary.id,
+            package_id=primary.id, commit=False,
             workflow_number=workflow_number,
             document_number=primary.document_number,
             message=combine_update_message(
@@ -123,6 +126,8 @@ def update_workflow(workflow_number: str, data: ExternalWorkflowUpdate, db: Sess
                 ),
             ),
         )
+    db.commit()
+    db.refresh(primary)
     return primary
 
 

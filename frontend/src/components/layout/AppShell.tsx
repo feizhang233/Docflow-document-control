@@ -1,11 +1,12 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Menu, Moon, Sun } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { NotificationsPopover } from './NotificationsPopover'
 import { UserMenu } from './UserMenu'
 import { useAuth } from '../../hooks/useAuth'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
+import { useWorkspaceAccess } from '../../hooks/useWorkspaceAccess'
 
 const readPreference = (key: string, fallback: string) => {
   try { return localStorage.getItem(key) || fallback } catch { return fallback }
@@ -17,6 +18,7 @@ const writePreference = (key: string, value: string) => {
 
 export function AppShell() {
   const { can } = useAuth()
+  const { viewOnly } = useWorkspaceAccess()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPreference('docflow-sidebar-collapsed', 'false') === 'true')
@@ -28,6 +30,7 @@ export function AppShell() {
     if (location.pathname.startsWith('/workflow')) return 'Workflow register'
     if (location.pathname.startsWith('/transmittal')) return 'Transmittal register'
     if (location.pathname.startsWith('/settings')) return 'Workspace settings'
+    if (location.pathname.startsWith('/notifications')) return 'Notification'
     return 'Workspace'
   }, [location.pathname])
   useDocumentTitle(routeLabel)
@@ -45,6 +48,9 @@ export function AppShell() {
     writePreference('docflow-theme',next)
     return next
   })
+  if (viewOnly && ['/workflow', '/transmittal', '/settings'].includes(location.pathname)) {
+    return <Navigate to={{pathname:'/documents/all',search:location.search}} replace />
+  }
   return (
     <div className={`app-shell ${sidebarCollapsed?'sidebar-is-collapsed':''}`}>
       <Sidebar mobileOpen={mobileOpen} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} onClose={() => setMobileOpen(false)} />

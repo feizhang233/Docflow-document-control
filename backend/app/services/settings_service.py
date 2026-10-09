@@ -52,11 +52,11 @@ DEFAULT_COLUMN_CONFIGS = {
 class SettingsService:
     def __init__(self, db: Session): self.db = db
     def list_configs(self):
-        items = list(self.db.scalars(select(ColumnConfig)))
+        items = list(self.db.scalars(select(ColumnConfig).where(ColumnConfig.field_name != "document_number")))
         order = {field_name:index for index,field_name in enumerate(DEFAULT_COLUMN_CONFIGS)}
         return sorted(items, key=lambda item:(order.get(item.field_name, len(order)), item.id))
     def update_config(self, field_name: str, data: ColumnConfigUpdate):
-        if field_name not in CONFIGURABLE_FIELDS: return None
+        if field_name == "document_number" or field_name not in CONFIGURABLE_FIELDS: return None
         item = self.db.scalar(select(ColumnConfig).where(ColumnConfig.field_name == field_name))
         if not item: return None
         if data.display_name is not None: item.display_name = data.display_name
@@ -85,7 +85,7 @@ class SettingsService:
             item.project_option_colors = {}
         self.db.commit(); self.db.refresh(item); return item
     def update_register_visibility(self, field_name: str, register: str, is_visible: bool):
-        if field_name not in CONFIGURABLE_FIELDS or register not in {"workflow", "transmittal"}: return None
+        if field_name == "document_number" or field_name not in CONFIGURABLE_FIELDS or register not in {"workflow", "transmittal"}: return None
         item = self.db.scalar(select(ColumnConfig).where(ColumnConfig.field_name == field_name))
         if not item: return None
         setattr(item, f"is_visible_{register}", is_visible)
@@ -157,34 +157,52 @@ class SettingsService:
                 next_id += 1
             incoming.append({"id": project_id, "code": project.code, "name": project.name})
         remaining_old_codes = {old_by_id[project_id]["code"] for project_id in old_by_id if project_id not in used_ids}
-        for old_code, new_code in remaps:
+        mapping = dict(remaps)
+        for old_code, _new_code in remaps:
             remaining_old_codes.discard(old_code)
-            for package in self.db.scalars(select(Package).where(Package.project_code == old_code)):
-                package.project_code = new_code
+        if mapping:
+            for package in self.db.scalars(select(Package).where(Package.project_code.in_(mapping))):
+                package.project_code = mapping[package.project_code]
         leftover = remaining_old_codes - {project["code"] for project in incoming}
         if leftover:
             counts = dict(self.db.execute(select(Package.project_code, func.count()).where(Package.project_code.in_(leftover)).group_by(Package.project_code)).all())
             blocking = [code for code in leftover if counts.get(code)]
             if blocking:
                 raise HTTPException(status_code=400, detail=f"Cannot remove project(s) still used by documents: {', '.join(sorted(blocking))}")
+        from app.models.iam import User, UserProject
+        from app.models.email_notification import EmailSubscription, EmailDelivery
+        mapping = dict(remaps)
+        users = list(self.db.scalars(select(User)))
+        subscriptions = list(self.db.scalars(select(EmailSubscription)))
+        referenced = {link.project_code for user in users for link in user.project_links} | {code for user in users for code in (user.read_only_projects or [])} | {sub.project_code for sub in subscriptions}
+        if leftover & referenced:
+            raise HTTPException(status_code=400, detail="Remove project access assignments and email subscriptions before removing this project")
+        for user in users:
+            codes = [mapping.get(link.project_code, link.project_code) for link in user.project_links]
+            user.read_only_projects = [mapping.get(code, code) for code in (user.read_only_projects or [])]
+            if any(link.project_code in mapping for link in user.project_links):
+                user.project_links.clear()
+                self.db.flush()
+                user.project_links = [UserProject(user_id=user.id, project_code=code) for code in codes]
+        remapped_subscriptions = [(subscription, mapping[subscription.project_code]) for subscription in subscriptions if subscription.project_code in mapping]
+        for subscription, _new_code in remapped_subscriptions:
+            subscription.project_code = f"~{subscription.id}"
+        if remapped_subscriptions:
+            self.db.flush()
+        for subscription, new_code in remapped_subscriptions:
+            subscription.project_code = new_code
+        for delivery in self.db.scalars(select(EmailDelivery).where(EmailDelivery.status.in_(["pending", "processing"]))):
+            delivery.project_code = mapping.get(delivery.project_code, delivery.project_code)
         item.projects = incoming
         workflow = self.db.get(WorkflowConfig, 1)
         if workflow:
-            overrides = dict(workflow.project_submission_steps or {})
-            for old_code, new_code in remaps:
-                if old_code in overrides:
-                    overrides[new_code] = overrides.pop(old_code)
+            overrides = {mapping.get(code, code): steps for code, steps in (workflow.project_submission_steps or {}).items()}
             for code in leftover:
                 overrides.pop(code, None)
             workflow.project_submission_steps = overrides
         for column in self.db.scalars(select(ColumnConfig)):
-            options = dict(column.project_options or {})
-            colors = dict(column.project_option_colors or {})
-            for old_code, new_code in remaps:
-                if old_code in options:
-                    options[new_code] = options.pop(old_code)
-                if old_code in colors:
-                    colors[new_code] = colors.pop(old_code)
+            options = {mapping.get(code, code): values for code, values in (column.project_options or {}).items()}
+            colors = {mapping.get(code, code): values for code, values in (column.project_option_colors or {}).items()}
             for code in leftover:
                 options.pop(code, None)
                 colors.pop(code, None)
@@ -257,6 +275,8 @@ class SettingsService:
         always appends packages rather than matching on document_number.
         """
         created = configs_updated = 0
+        added = []
+        removed = [(item.project_code, item.document_number) for item in self.db.scalars(select(Package))] if mode == "replace" else []
         if mode == "replace":
             self.db.execute(delete(Package)); self.db.flush()
         if payload.workflow_config:
@@ -275,6 +295,7 @@ class SettingsService:
             if row.updated_at:
                 item.updated_at = row.updated_at.replace(tzinfo=None)
             self.db.add(item)
+            added.append(item)
             created += 1
         self.ensure_project_codes([row.project_code for row in payload.packages])
         for incoming in payload.column_configs:
@@ -293,6 +314,7 @@ class SettingsService:
                 config.project_options = incoming.project_options if incoming.field_name in POOL_FIELDS else {}
                 config.project_option_colors = incoming.project_option_colors if incoming.field_name in POOL_FIELDS else {}
                 configs_updated += 1
+        self._notify_import(mode, added, removed)
         self.db.commit()
         return {"mode":mode,"packages_created":created,"packages_updated":0,"configs_updated":configs_updated}
     def import_csv(self, payload: CsvMetadataImport, mode: str):
@@ -303,6 +325,8 @@ class SettingsService:
         inserted as a new row. Merge appends; replace clears the table first.
         """
         created = 0
+        added = []
+        removed = [(item.project_code, item.document_number) for item in self.db.scalars(select(Package))] if mode == "replace" else []
         if mode == "replace":
             self.db.execute(delete(Package)); self.db.flush()
         workflow = self.get_workflow_config()
@@ -323,9 +347,29 @@ class SettingsService:
             }
             defaults.update(values)
             defaults["document_number"] = number
-            self.db.add(Package(**defaults))
+            item = Package(**defaults)
+            self.db.add(item)
+            added.append(item)
             created += 1
             order_index += 1
         self.ensure_project_codes([row.project_code for row in payload.rows if row.project_code])
+        self._notify_import(mode, added, removed)
         self.db.commit()
         return {"mode":mode,"packages_created":created,"packages_updated":0,"configs_updated":0}
+
+    def _notify_import(self, mode: str, added: list[Package], removed: list[tuple[str, str]]):
+        from app.services.email_notification_service import EmailNotificationService
+        from app.models.workflow_comment import WorkflowComment
+        self.db.flush()
+        projects = {item.project_code for item in added} | {project for project, _number in removed}
+        for project in sorted(projects):
+            current = [item for item in added if item.project_code == project]
+            deleted = [number for code, number in removed if code == project]
+            details = "\n".join(f"{item.document_number} · {item.document_title or '(empty)'} · {item.workflow_number or '(no workflow)'}" for item in current)
+            workflows = {item.workflow_number for item in current if item.workflow_number}
+            comments = list(self.db.scalars(select(WorkflowComment).where(WorkflowComment.workflow_number.in_(workflows)).order_by(WorkflowComment.workflow_number, WorkflowComment.order_index))) if workflows else []
+            comment_text = "\n\n".join(f"{comment.workflow_number} · {comment.author or 'Unknown author'}\n{comment.body}" for comment in comments)
+            EmailNotificationService(self.db).enqueue(
+                project_code=project, event_types=["document"], subject=f"[DocFlow · {project}] Register import · {len(current)} added, {len(deleted)} removed",
+                body=f"Register import ({mode}): {len(current)} documents added, {len(deleted)} removed.\n\nAdded documents:\n{details or '(none)'}\n\nRemoved documents:\n{', '.join(deleted) or '(none)'}" + (f"\n\nCurrent comments:\n{comment_text}" if comment_text else ""),
+            )

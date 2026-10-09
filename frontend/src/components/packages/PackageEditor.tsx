@@ -5,6 +5,7 @@ import type { ColumnConfig, InputColumnField, Package, PackageInput, ProjectCode
 import { feedbackSteps, submissionSteps, type FeedbackStatusCode } from '../../types/package'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { ModalLayer } from '../common/ModalLayer'
+import { useAuth } from '../../hooks/useAuth'
 import { useProjects } from '../../hooks/useProjects'
 import { packagesApi } from '../../lib/api'
 import { columnOptionsFor, defaultDisciplines, defaultDocumentTypes, findUsedTransmittal, isAutomaticTransmittalNumber, submissionStepsFor, transmittalPrefix } from '../../lib/projects'
@@ -38,7 +39,11 @@ const fallback: Partial<Record<BaseField, string[]>> = {
 }
 
 export function PackageEditor({ item, configs, workflowConfig, open, saving, onClose, onSave, defaultProject }: { item: Package | null; configs: ColumnConfig[]; workflowConfig: WorkflowConfig; open: boolean; saving: boolean; onClose: () => void; onSave: (data: PackageInput) => void; defaultProject?: ProjectCode }) {
-  const {projects, codes, labels, defaultCode} = useProjects()
+  const {projects: allProjects, labels} = useProjects()
+  const {can} = useAuth()
+  const projects = allProjects.filter(project => can('packages:write', project.code))
+  const codes = projects.map(project => project.code)
+  const defaultCode = codes[0] || ''
   const createProject = defaultProject && codes.includes(defaultProject) ? defaultProject : defaultCode
   const [form, setForm] = useState<PackageInput>(() => blank(createProject))
   const [duplicateOpen, setDuplicateOpen] = useState(false)

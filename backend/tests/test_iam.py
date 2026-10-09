@@ -11,6 +11,78 @@ def test_unauthenticated_ui_routes_are_rejected(anon_client):
     assert anon_client.get("/api/health").status_code == 200
 
 
+def test_per_project_read_only_limits_every_document_mutation(client, anon_client):
+    from tests.test_packages import payload
+    nfs = client.post("/api/packages", json=payload("NFS-READ")).json()
+    fst = client.post("/api/packages", json=payload("FST-EDIT") | {"project_code": "FST"}).json()
+    user = client.post("/api/iam/users", json={
+        "username": "mixedscope", "display_name": "Mixed access", "password": "controller-pass",
+        "role_slugs": ["document_controller"], "all_projects": False,
+        "project_codes": ["NFS", "FST"], "read_only_projects": ["NFS"],
+    })
+    assert user.status_code == 201, user.text
+    assert user.json()["read_only_projects"] == ["NFS"]
+    login(anon_client, "mixedscope", "controller-pass")
+    assert anon_client.get(f"/api/packages/{nfs['id']}/workflow-comments").status_code == 200
+    assert anon_client.patch(f"/api/packages/{nfs['id']}", json={"notes": "blocked"}).status_code == 403
+    assert anon_client.delete(f"/api/packages/{nfs['id']}").status_code == 403
+    assert anon_client.post(f"/api/packages/{nfs['id']}/duplicate").status_code == 403
+    assert anon_client.post("/api/packages", json=payload("NEW-READ")).status_code == 403
+    assert anon_client.post("/api/packages/reorder", json={"package_ids": [nfs["id"], fst["id"]]}).status_code == 403
+    assert anon_client.patch(f"/api/packages/{fst['id']}", json={"project_code": "NFS"}).status_code == 403
+    assert anon_client.patch(f"/api/packages/{fst['id']}", json={"notes": "allowed"}).status_code == 200
+    assert anon_client.post("/api/packages", json=payload("NEW-EDIT") | {"project_code": "FST"}).status_code == 201
+    assert anon_client.post("/api/settings/columns/reset").status_code == 403
+    assert anon_client.post("/api/metadata/import-csv", json={"rows": []}).status_code == 403
+    assert anon_client.post("/api/email-subscriptions", json={"project_code": "NFS", "email": "a@example.com"}).status_code == 201
+
+
+def test_project_override_validation_and_role_cap(client, anon_client):
+    request = {"username": "scopevalid", "display_name": "Scope", "password": "viewer-password", "role_slugs": ["viewer"], "all_projects": False, "project_codes": ["NFS"]}
+    assert client.post("/api/iam/users", json=request | {"read_only_projects": ["FST"]}).status_code == 422
+    assert client.post("/api/iam/users", json=request | {"read_only_projects": ["UNKNOWN"]}).status_code == 422
+    result = client.post("/api/iam/users", json=request)
+    assert result.status_code == 201
+    login(anon_client, "scopevalid", "viewer-password")
+    assert anon_client.post("/api/packages", json={}).status_code == 403
+    promoted = client.patch(f"/api/iam/users/{result.json()['id']}", json={"role_slugs": ["admin"]})
+    assert promoted.status_code == 200
+    assert promoted.json()["all_projects"] is True
+    assert promoted.json()["read_only_projects"] == []
+
+
+def test_project_rename_keeps_access_and_subscriptions(client, anon_client):
+    from tests.test_packages import payload
+    user = client.post("/api/iam/users", json={"username": "renameuser", "display_name": "Rename", "password": "viewer-password", "role_slugs": ["viewer"], "all_projects": False, "project_codes": ["NFS"], "read_only_projects": ["NFS"]}).json()
+    client.post("/api/packages", json=payload())
+    subscription = client.post("/api/email-subscriptions", json={"project_code": "NFS", "email": "a@example.com"}).json()
+    projects = client.get("/api/settings/projects").json()["projects"]
+    changed = [{"id": item["id"], "code": "MAIN" if item["code"] == "NFS" else item["code"], "name": item["name"]} for item in projects]
+    assert client.put("/api/settings/projects", json={"projects": changed}).status_code == 200
+    saved = next(item for item in client.get("/api/iam/users").json()["items"] if item["id"] == user["id"])
+    assert saved["project_codes"] == ["MAIN"] and saved["read_only_projects"] == ["MAIN"]
+    assert next(item for item in client.get("/api/email-subscriptions").json()["items"] if item["id"] == subscription["id"])["project_code"] == "MAIN"
+    login(anon_client, "renameuser", "viewer-password")
+    assert anon_client.get("/api/packages", params={"period": "all"}).json()["total"] == 1
+
+
+def test_project_code_swap_preserves_project_membership(client):
+    from tests.test_packages import payload
+    nfs = client.post("/api/packages", json=payload("NFS-SWAP")).json()
+    fst = client.post("/api/packages", json=payload("FST-SWAP") | {"project_code": "FST"}).json()
+    first = client.post("/api/email-subscriptions", json={"project_code": "NFS", "email": "same@example.com"}).json()
+    second = client.post("/api/email-subscriptions", json={"project_code": "FST", "email": "same@example.com"}).json()
+    projects = client.get("/api/settings/projects").json()["projects"]
+    swapped = [{"id": item["id"], "code": {"NFS": "FST", "FST": "NFS"}.get(item["code"], item["code"]), "name": item["name"]} for item in projects]
+    result = client.put("/api/settings/projects", json={"projects": swapped})
+    assert result.status_code == 200, result.text
+    assert client.get(f"/api/packages/{nfs['id']}").json()["project_code"] == "FST"
+    assert client.get(f"/api/packages/{fst['id']}").json()["project_code"] == "NFS"
+    subscriptions = {item["id"]: item for item in client.get("/api/email-subscriptions").json()["items"]}
+    assert subscriptions[first["id"]]["project_code"] == "FST"
+    assert subscriptions[second["id"]]["project_code"] == "NFS"
+
+
 def test_external_api_key_can_read_workflow_settings(anon_client):
     denied = anon_client.get("/api/external/settings/workflow", headers={"X-API-Key": "wrong"})
     assert denied.status_code == 401

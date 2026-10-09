@@ -63,3 +63,17 @@ def assert_project_access(user: User, project_code: str | None):
 
 def project_scope(user: User) -> list[str] | None:
     return user.allowed_projects()
+
+
+def assert_project_permission(user: User, project_code: str, code: str):
+    assert_project_access(user, project_code)
+    if not user.can_in_project(code, project_code):
+        raise HTTPException(status_code=403, detail="This project is read-only for your account")
+
+
+def require_workspace_write(code: str):
+    def dependency(user: User = Depends(require_permission(code))) -> User:
+        if user.read_only_projects:
+            raise HTTPException(status_code=403, detail="Workspace changes are unavailable while any project is read-only")
+        return user
+    return dependency

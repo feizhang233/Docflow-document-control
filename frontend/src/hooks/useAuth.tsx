@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../lib/api'
 import { hasPermission, type AuthUser, type PermissionCode } from '../types/iam'
 
@@ -9,25 +10,27 @@ interface AuthContextValue {
   logout: () => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthUser>
   refreshUser: () => Promise<AuthUser | null>
-  can: (permission: PermissionCode | string) => boolean
+  can: (permission: PermissionCode | string, project?: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   const refreshUser = useCallback(async () => {
     try {
       const current = await authApi.me()
+      queryClient.clear()
       setUser(current)
       return current
     } catch {
       setUser(null)
       return null
     }
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     let active = true
@@ -46,24 +49,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active) setLoading(false)
       }
     })()
-    const onUnauthorized = () => setUser(null)
+    const onUnauthorized = () => { queryClient.clear(); setUser(null) }
     window.addEventListener('docflow:unauthorized', onUnauthorized)
     return () => {
       active = false
       window.removeEventListener('docflow:unauthorized', onUnauthorized)
     }
-  }, [])
+  }, [queryClient])
 
   const login = useCallback(async (username: string, password: string) => {
     const current = await authApi.login(username, password)
+    queryClient.clear()
     setUser(current)
     return current
-  }, [])
+  }, [queryClient])
 
   const logout = useCallback(async () => {
     try { await authApi.logout() } catch { /* still clear local session */ }
+    queryClient.clear()
     setUser(null)
-  }, [])
+  }, [queryClient])
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    const update = async () => {
+      try {
+        const current = await authApi.me()
+        const access = (value: AuthUser) => JSON.stringify([value.permissions, value.all_projects, value.project_codes, value.read_only_projects])
+        if (active && access(current) !== access(user)) {
+          queryClient.clear()
+          setUser(current)
+        }
+      } catch { /* the response interceptor owns session recovery */ }
+    }
+    const timer = window.setInterval(update, 30_000)
+    window.addEventListener('focus', update)
+    return () => {active = false; window.clearInterval(timer); window.removeEventListener('focus', update)}
+  }, [user, queryClient])
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     const current = await authApi.changePassword(currentPassword, newPassword)
@@ -78,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     changePassword,
     refreshUser,
-    can: (permission) => hasPermission(user, permission),
+    can: (permission, project) => hasPermission(user, permission, project),
   }), [user, loading, login, logout, changePassword, refreshUser])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

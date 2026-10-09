@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 from app.models.package import Package
+from app.services.email_notification_service import EmailNotificationService
 
 SORTABLE_FIELDS = {"project_code","document_number","document_title","document_date","document_type","initiator","discipline","number_of_documents","transmittal_number","workflow_number","workflow_terminated","is_abandoned","has_attachment","order_index","created_at","updated_at"}
 
@@ -83,12 +84,34 @@ class PackageRepository:
             )
         )
     def create(self, values: dict):
-        item = Package(**sync_termination_flags(values)); self.db.add(item); self.db.commit(); self.db.refresh(item); return item
-    def update(self, item: Package, values: dict):
+        item = Package(**sync_termination_flags(values))
+        self.db.add(item)
+        self.db.flush()
+        EmailNotificationService(self.db).package_change(item, "created")
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+    def update(self, item: Package, values: dict, *, commit: bool = True):
         values = sync_termination_flags(values, item.feedback)
+        previous_project = item.project_code
+        previous_number = item.document_number
+        changes = {key: (getattr(item, key), value) for key, value in values.items() if getattr(item, key) != value and key != "order_index"}
         for key, value in values.items(): setattr(item, key, value)
-        self.db.commit(); self.db.refresh(item); return item
-    def delete(self, item: Package): self.db.delete(item); self.db.commit()
+        if changes:
+            emails = EmailNotificationService(self.db)
+            emails.package_change(item, "updated", changes)
+            if previous_project != item.project_code:
+                emails.enqueue(project_code=previous_project, event_types=["document"], subject=f"[DocFlow · {previous_project}] Document moved out · {previous_number}", body=f"Document {previous_number} was moved out of this project.")
+        if commit:
+            self.db.commit()
+            self.db.refresh(item)
+        else:
+            self.db.flush()
+        return item
+    def delete(self, item: Package):
+        EmailNotificationService(self.db).package_change(item, "deleted")
+        self.db.delete(item)
+        self.db.commit()
     def reorder(self, ids: list[int], start_index: int = 0):
         items = {p.id:p for p in self.db.scalars(select(Package).where(Package.id.in_(ids)))}
         if len(items) != len(set(ids)): return False

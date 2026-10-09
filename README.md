@@ -4,7 +4,7 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 
 ## Features
 
-- Sign-in, roles, and project-scoped access (Administrator, Document Controller, Editor, Viewer)
+- Sign-in, roles, and project-scoped access (Administrator, Document Controller, Editor, Viewer), with per-project View only / Role actions
 - Dashboard with package and workflow health metrics
 - Documents register with This Week (default), This Month, This Year, and All views
 - Dedicated Workflow and Transmittal registers with correct default sorting
@@ -16,7 +16,8 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 - CSV document import/export with merge and full-replace modes
 - Per-column text/dropdown configuration with custom option lists
 - Settings editor for Submission stage names/order, Feedback reviewer names, and A/B/C/P labels
-- Categorized Submission Progress and Workflow Feedback notifications with unread state
+- Categorized Submission Progress, Workflow Feedback, and Comments notifications with unread state
+- Personal notification emails (up to 5 per account), project subscriptions including comments, pause/resume, a durable queue, and automatic retries
 - API-key-protected endpoints for daily external Workflow and Final Mail comment synchronization
 - Click-to-advance Submission progress with equally styled current and following step labels
 - Shared draggable Submission slider in document details and editing
@@ -92,3 +93,17 @@ npm run build
 Install Docker Engine and the Docker Compose plugin, clone/copy the project, configure `.env`, then run `docker compose up -d --build`. Put TLS in front of port 80 using Caddy, Nginx, or a managed reverse proxy. Do not expose MySQL port 3306 publicly in production; remove its `ports` entry or restrict it with the VPS firewall. Back up the `mysql_data` volume regularly.
 
 See [API.md](API.md) for every endpoint and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the code map.
+
+## Project access and email setup
+
+Notifications default to English for interface copy, generated titles and email templates. Comments and document content retain their original language.
+
+In **Settings → Users & access**, choose the user's roles and project scope. For each assigned project choose **View only** or **Role actions**. Viewer can read project records and manage its own notification emails; Administrator always has full access. Other roles can have mixed access, such as NFS view only and FST editable. View-only users can read workflow comments. Workspace settings/imports are unavailable if any project is read-only.
+
+In the left sidebar, open **Notification → Email addresses**. Every account can manage up to **5 distinct addresses** of its own, including view-only accounts. Choose the project and update types. Reuse an address for another project without consuming an extra slot. Paused addresses count towards the limit; remove all project subscriptions under an address to free its slot. Recipients do not need DocFlow accounts. Document updates, progress, feedback, and comment changes are supported; emails include the current comments. Identical synchronization snapshots do not send repeats. Bulk register imports send one summary per project.
+
+To enable outgoing email, fill the SMTP fields in `.env.example` and copy them to the deployment's `.env`: `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM_EMAIL`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SECURITY`. Use `starttls` with port 587 or `ssl` with port 465 as required by your provider. Set `PUBLIC_APP_URL` to include document links, then recreate/restart the backend so it reads the configuration. The UI shows when mail has not been configured; subscriptions and queued changes are still saved. After configuration, queued email is processed automatically. Test delivery to your own mailbox before adding project recipients.
+
+Migration `20261009_26` adds project read-only overrides and email subscription/outbox tables; `20261009_27` makes subscriptions personal to their account owner. Docker startup applies the migrations and refreshes the role catalog. Local development must run `alembic upgrade head` and `python -m app.seed` before starting the API. SMTP failure cannot roll back the document change; failed delivery can be retried in Notification.
+
+View-only browsing shows **Dashboard, Documents and Notification** only. Workflow/Transmittal/Settings direct links return to Documents. The interface follows the selected project for accounts with mixed access. Document Number is absent from all register tables and column settings; detail/edit forms, exports and stored identifiers retain it.

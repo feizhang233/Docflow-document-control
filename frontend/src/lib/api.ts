@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { EmailEventType, EmailSubscription, EmailSubscriptionList } from '../types/notification'
 import type { AuditEventList, AuthUser, Permission, Role, UserCreateInput, UserList, UserUpdateInput } from '../types/iam'
 import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, TransmittalSuggestions, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
@@ -94,11 +95,19 @@ export const metadataApi = {
 }
 
 export const notificationsApi = {
-  list: async (limit=30) => (await client.get<NotificationList>('/notifications',{params:{limit}})).data,
+  list: async (limit=30,project_code?:string) => (await client.get<NotificationList>('/notifications',{params:{limit,project_code}})).data,
   listWorkflowFeedback: async (packageId:number,limit=20) => (await client.get<NotificationList>('/notifications',{params:{limit,package_id:packageId,notification_type:'workflow_feedback'}})).data,
   markRead: async (id: number) => client.patch(`/notifications/${id}/read`),
   markAllRead: async () => client.patch('/notifications/read-all'),
   clear: async () => client.delete('/notifications'),
+}
+
+export const emailSubscriptionsApi = {
+  list: async (page = 1) => (await client.get<EmailSubscriptionList>('/email-subscriptions', {params: {offset: (page - 1) * 100, limit: 100}})).data,
+  create: async (data: {project_code: string; email: string; event_types: EmailEventType[]}) => (await client.post<EmailSubscription>('/email-subscriptions', data)).data,
+  setActive: async (id: number, is_active: boolean) => (await client.patch<EmailSubscription>(`/email-subscriptions/${id}`, {is_active})).data,
+  remove: async (id: number) => client.delete(`/email-subscriptions/${id}`),
+  retry: async (id: number) => client.post(`/email-subscriptions/${id}/retry`),
 }
 
 function formatApiDetail(detail: unknown): string | null {

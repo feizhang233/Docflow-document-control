@@ -39,10 +39,10 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const {codes, labels, canSeeAll} = useProjects()
   const {can} = useAuth()
-  const canWrite = can('packages:write')
-  const canDelete = can('packages:delete')
   const canManageColumns = can('settings:write')
   const selectedProject = projectFilterFrom(searchParams.get('project'), codes, canSeeAll)
+  const canWrite = selectedProject === 'ALL' ? codes.some(code => can('packages:write', code)) : can('packages:write', selectedProject)
+  const canDelete = selectedProject === 'ALL' ? codes.some(code => can('packages:delete', code)) : can('packages:delete', selectedProject)
   const focusValue = searchParams.get('focus') || ''
   const focusPackageId = Number(searchParams.get('package')) || null
   const period = kind === 'documents' ? (routePeriod as Period || 'week') : 'all'
@@ -285,6 +285,8 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
     }))
   }, [query.data?.items, filters, currentFeedbackReviewers, workflowConfig])
   const selectedItems = useMemo(() => visibleItems.filter((item) => selectedIds.has(item.id)), [visibleItems, selectedIds])
+  const canBulkWrite = selectedItems.length > 0 && selectedItems.every(item => can('packages:write', item.project_code))
+  const canBulkDelete = selectedItems.length > 0 && selectedItems.every(item => can('packages:delete', item.project_code))
   useEffect(() => {
     const visibleIdSet = new Set(visibleItems.map((item) => item.id))
     setSelectedIds((prev) => {
@@ -411,7 +413,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             <AdvancedFilter rules={filters} onChange={setFilters} />
           </div>
         </div>
-        {selectionMode && (
+        {selectionMode && canWrite && (
           <div className="selection-bar">
             <div className="selection-summary">
               <strong>{selectedIds.size}</strong> selected
@@ -422,14 +424,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             <div className="selection-actions">
               <button
                 className="secondary-button"
-                disabled={!selectedIds.size || bulkUpdate.isPending}
+                disabled={!canBulkWrite || bulkUpdate.isPending}
                 onClick={() => { setSelected(null); setBulkEditorOpen(true) }}
               >
                 <Pencil size={15} /> Edit together
               </button>
               {canDelete && <button
                 className="secondary-button danger-button"
-                disabled={!selectedIds.size || bulkDelete.isPending}
+                disabled={!canBulkDelete || bulkDelete.isPending}
                 onClick={confirmBulkDelete}
               >
                 <Trash2 size={15} /> Delete
@@ -437,7 +439,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
               <div className="bulk-more" ref={bulkMenuRef}>
                 <button
                   className="secondary-button"
-                  disabled={!selectedIds.size || bulkUpdate.isPending}
+                  disabled={!canBulkWrite || bulkUpdate.isPending}
                   onClick={() => setBulkMenuOpen((value) => !value)}
                   aria-expanded={bulkMenuOpen}
                 >
@@ -461,6 +463,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             <strong>{filters.length ? visibleItems.length : query.data?.total ?? '—'}</strong> documents <span>·</span> {labels[selectedProject]} <span>·</span> {titlePeriod}
             {filters.length > 0 && <span>· {filters.length} filters</span>}
             {selectionMode && <span>· Selection mode</span>}
+            {!canWrite && <span>· View only</span>}
           </div>
           <div className="legend"><i className="done" /> Complete <i /> Pending</div>
         </div>
@@ -481,7 +484,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             feedbackReviewers={currentFeedbackReviewers}
             feedbackStatusLabels={workflowConfig.feedback_status_labels}
             feedbackStatusColors={workflowConfig.feedback_status_colors}
-            selectionMode={selectionMode}
+            selectionMode={selectionMode && canWrite}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -494,6 +497,8 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             onEdit={(item) => { setSelected(null); setEditing(item); setEditorOpen(true) }}
             canWrite={canWrite}
             canDelete={canDelete}
+            canWriteProject={code => can('packages:write', code)}
+            canDeleteProject={code => can('packages:delete', code)}
             onColumnResize={(field, width) => {
               const config = configs.data?.find((item) => item.field_name === field)
               if (config && canManageColumns) resizeColumn.mutate({ config, width })
@@ -531,7 +536,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           </div>
         )}
       </section>
-      <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!canWrite} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
+      <PackageDrawer item={selected} configs={configs.data || []} workflowConfig={workflowConfig} saving={quickUpdate.isPending} readOnly={!selected || !can('packages:write', selected.project_code)} onUpdate={(data) => selected && quickUpdate.mutate({ id: selected.id, data })} onClose={() => setSelected(null)} />
       <PackageEditor item={editing} configs={configs.data || []} workflowConfig={workflowConfig} open={editorOpen} saving={save.isPending} onClose={() => setEditorOpen(false)} onSave={(data) => save.mutate(data)} defaultProject={selectedProject === 'ALL' ? undefined : selectedProject} />
       <BulkPackageEditor
         items={selectedItems}

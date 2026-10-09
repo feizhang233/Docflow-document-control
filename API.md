@@ -53,9 +53,15 @@ Roles are system-defined: `admin`, `document_controller`, `editor`, `viewer`. Pe
 | `GET` | `/api/iam/permissions` | `iam:read` | List permission catalog |
 | `GET` | `/api/iam/audit` | `iam:read` | Recent access events (`limit`, `offset`) |
 
-Create-user body includes `username`, `display_name`, `password`, `role_slugs`, optional `email`, `all_projects`, and `project_codes`. The last active administrator cannot be demoted or disabled. The Guest account password cannot be reset, and its Viewer role cannot be changed.
+Create-user body includes `username`, `display_name`, `password`, `role_slugs`, optional `email`, `all_projects`, `project_codes`, and `read_only_projects`. The last active administrator cannot be demoted or disabled. The Guest account password cannot be reset, and its Viewer role cannot be changed.
 
 Internal document, settings, notification, and backup routes now require the matching permission. Missing authentication returns `401`; missing permission returns `403`. Project-scoped users receive `403` when they request another project.
+
+### Per-project view-only access
+
+`read_only_projects` lists assigned project codes that override document actions to view only. For example, an Editor with `project_codes: ["NFS", "FST"]`, `all_projects: false`, and `read_only_projects: ["NFS"]` can read both projects but only edit FST. Unlisted assigned projects follow the account's role permissions; an override never grants permissions absent from the role. Viewer stays read-only everywhere. Administrators always have all-project access and no read-only overrides.
+
+These restrictions are enforced on create, edit, duplicate, delete, move (both source and destination), and reorder. Workspace settings and metadata imports are blocked when an account has any read-only project, since those operations can affect the whole workspace. Project renaming preserves access assignments, overrides, and email subscriptions. A project used by an access assignment or subscription cannot be removed until those references are removed.
 
 ## External workflow automation
 
@@ -67,7 +73,7 @@ X-API-Key: your-api-key
 Content-Type: application/json
 ```
 
-The endpoint is intended for a daily synchronization script. It locates the document by Workflow Number, applies the supplied fields, and creates categorized unread notifications in DocFlow. A request that updates both Submission Progress and Workflow Feedback creates one notification in each category.
+The endpoint is intended for a daily synchronization script. It locates the document by Workflow Number, applies the supplied fields, and creates categorized unread notifications in DocFlow. A request with actual changes to both Submission Progress and Workflow Feedback creates one notification in each category. Repeating an unchanged update does not queue email or create another bell notification.
 
 All body fields are optional, but at least one workflow or feedback field must be supplied:
 
@@ -233,11 +239,45 @@ Responses:
 - `401`: missing or invalid API key
 - `422`: invalid payload
 
+## Project email notifications
+
+Notification interface copy, generated titles, email subjects and template labels default to English regardless of browser language. Email messages declare `Content-Language: en`. Comments, document values, custom project labels and external messages retain their original text.
+
+Every system role, including Viewer and Guest, has `notifications:subscribe` to manage its own notification emails. Each account can save at most 5 distinct normalized email addresses, including paused subscriptions. One address can subscribe to multiple accessible projects and counts once. Each owner/project/email combination is unique; different accounts may independently use the same address. Other accounts, including administrators, cannot list or modify these personal subscriptions. Recipients do not need login accounts, and the account login email is never subscribed automatically. View-only project access permits subscriptions while continuing to block document mutations.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/email-subscriptions?offset=0&limit=50` | Own subscriptions, total, `address_count`, `address_limit` (5), `mail_configured`, and latest delivery status/error |
+| `POST` | `/api/email-subscriptions` | Subscribe an email to one project |
+| `PATCH` | `/api/email-subscriptions/{id}` | Pause/resume with `{ "is_active": false/true }` |
+| `DELETE` | `/api/email-subscriptions/{id}` | Remove the subscription and its email queue/history |
+| `POST` | `/api/email-subscriptions/{id}/retry` | Requeue failed deliveries for an active subscription |
+
+Creation body:
+
+```json
+{
+  "project_code": "NFS",
+  "email": "reviewer@example.com",
+  "event_types": ["document", "submission_progress", "workflow_feedback", "workflow_comments"]
+}
+```
+
+At least one event type is required; all four are selected by default. The same email can subscribe to several projects, but each owner/project/email combination is unique (`409` for a duplicate, `422` when adding a sixth distinct address). Subscriptions only send future changes. Create/edit/delete/duplicate, workflow synchronization, and JSON/CSV register import produce email events. Imports produce one summary per affected project. Row reordering does not send email.
+
+Emails contain document/workflow identifiers, changed fields with before/after values, and current workflow comments. Comment synchronization emits a `workflow_comments` bell notification and email per affected project, including previous and current comments. Identical snapshots (including equivalent timestamp offsets) are ignored. A shared workflow's document list in each email contains only that project's documents. Comments without a matching document are stored without sending an email; later document creation/assignment includes the stored comments.
+
+Email is queued in the same transaction as each document/comment change. The API does not wait on SMTP. The backend sends queued email automatically, checking every `EMAIL_POLL_SECONDS` (default 30). Failures retry with exponential backoff, up to five attempts, then remain `failed` for an explicit retry. Worker leases prevent concurrent workers from handling the same row; expired leases recover after restart. SMTP delivery is at least once: a crash after provider acceptance but before recording `sent` may cause a repeat, with the same Message-ID. A `sent` status means the mail server accepted the message, not confirmation that a person received/read it.
+
+Pausing cancels queued deliveries; resuming only sends new changes. An email already being handed to SMTP may complete. Before enqueueing and sending, the worker checks the owner's active status, project scope, and `notifications:subscribe`; revoked access cancels delivery. Owners can still list, pause and delete their own revoked-project subscriptions to free address slots. Resume/retry requires current project access and never transfers ownership. Existing addresses over the limit are preserved for removal; no new distinct address may be added until below 5. Concurrent additions are serialized per account in MySQL. Moving a document notifies the old project only that it moved out; updated content is sent to the destination project's subscribers.
+
+Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM_EMAIL`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SECURITY` (`starttls`, `ssl`, or `plain` for a trusted local relay), then restart the backend. Credentials stay in server environment variables. `PUBLIC_APP_URL` optionally adds a link to the record. With no mail configuration, the UI shows a setup notice and changes remain queued. No real emails are sent by automated tests.
+
 ## Notifications
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/api/notifications?limit=30` | List newest notifications and unread count; optionally filter by `package_id` and `notification_type` |
+| `GET` | `/api/notifications?limit=30` | List newest notifications and unread count; optionally filter by `package_id`, `notification_type`, and `project_code`; each item includes its current package's `project_code` for permission-aware browsing links |
 | `PATCH` | `/api/notifications/{id}/read` | Mark one notification as read |
 | `PATCH` | `/api/notifications/read-all` | Mark every notification as read |
 
@@ -300,3 +340,9 @@ CSV imports accept a JSON body with `rows` after the browser parses a selected C
 | `GET` | `/api/health` | API and database health check |
 
 Lost MySQL connections return `503` and reset the connection pool so the next request can reconnect.
+
+## Browsing interface
+
+The left sidebar exposes Notification as an independent entry with Updates and Email addresses sections. A Viewer, an account with all assigned projects set to view only, or a mixed-access account browsing a view-only project sees only Dashboard, Documents and Notification. Direct Workflow, Transmittal and Settings routes redirect to Documents while preserving project and record query parameters. A mixed-access account regains its role interface when it selects an editable project.
+
+Document Number is removed from every register table and from column settings. It cannot be restored through column visibility/reset endpoints. The document identifier remains in detail/edit forms, stored data, exports and integrations.

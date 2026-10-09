@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { Check, KeyRound, LoaderCircle, Plus, Shield, X } from 'lucide-react'
@@ -19,11 +19,12 @@ const emptyCreate = {
   role_slugs: ['viewer'] as string[],
   all_projects: true,
   project_codes: [] as string[],
+  read_only_projects: [] as string[],
 }
 
 export function AccessPanel() {
   const queryClient = useQueryClient()
-  const { user: currentUser, can } = useAuth()
+  const { user: currentUser, can, refreshUser } = useAuth()
   const { codes, labels } = useProjects()
   const canWrite = can('iam:write')
   const users = useQuery({ queryKey: ['iam-users'], queryFn: iamApi.listUsers })
@@ -44,7 +45,7 @@ export function AccessPanel() {
         </div>
         {canWrite && <button className="primary-button" onClick={() => setCreating(true)}><Plus size={16} /> New user</button>}
       </div>
-      {users.isLoading ? <div className="config-loading"><LoaderCircle className="spin" /> Loading users…</div> : (
+      {users.isLoading ? <div className="config-loading"><LoaderCircle className="spin" /> Loading users…</div> : users.isError ? <div className="config-note" role="alert"><strong>{getApiError(users.error)}</strong><button className="secondary-button" onClick={() => users.refetch()}>Retry</button></div> : (
         <div className="iam-user-list">
           <div className="workflow-config-title iam-list-heading">
             <div><strong>Accounts</strong><span>People who can sign in to this DocFlow workspace.</span></div>
@@ -60,6 +61,7 @@ export function AccessPanel() {
               <div className="iam-user-meta">
                 <span className="badge blue">{user.roles.map((role) => role.name).join(', ') || 'No role'}</span>
                 <small>{user.all_projects ? 'All projects' : user.project_codes.join(', ') || 'No projects'}</small>
+                <small>{user.permissions.includes('packages:write') ? (user.read_only_projects?.length ? `View only: ${user.read_only_projects.join(', ')}` : 'Actions follow assigned roles') : 'View only'}</small>
               </div>
               <div className="iam-user-status">
                 <span className={`iam-status-pill ${user.is_active ? 'active' : 'disabled'}`}>{user.is_active ? 'Active' : 'Disabled'}</span>
@@ -96,7 +98,7 @@ export function AccessPanel() {
         )}
       </div>
       {creating && <UserEditor mode="create" roles={roles.data || []} projectCodes={codes} projectLabels={labels} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); queryClient.invalidateQueries({ queryKey: ['iam-users'] }); queryClient.invalidateQueries({ queryKey: ['iam-audit'] }) }} />}
-      {editing && <UserEditor mode="edit" user={editing} roles={roles.data || []} projectCodes={codes} projectLabels={labels} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); queryClient.invalidateQueries({ queryKey: ['iam-users'] }); queryClient.invalidateQueries({ queryKey: ['iam-audit'] }) }} />}
+      {editing && <UserEditor mode="edit" user={editing} roles={roles.data || []} projectCodes={codes} projectLabels={labels} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refreshUser(); queryClient.invalidateQueries({ queryKey: ['iam-users'] }); queryClient.invalidateQueries({ queryKey: ['iam-audit'] }) }} />}
       {resetting && <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} onSaved={() => { setResetting(null); queryClient.invalidateQueries({ queryKey: ['iam-users'] }); queryClient.invalidateQueries({ queryKey: ['iam-audit'] }) }} />}
     </section>
   )
@@ -121,7 +123,12 @@ function UserEditor({
     role_slugs: user.roles.map((role) => role.slug),
     all_projects: user.all_projects,
     project_codes: user.project_codes,
+    read_only_projects: user.read_only_projects || [],
   } : { ...emptyCreate })
+  const formRef = useRef<HTMLFormElement>(null)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
+  const [accessConfirmOpen, setAccessConfirmOpen] = useState(false)
   const [toggleOpen, setToggleOpen] = useState(false)
   const create = useMutation({
     mutationFn: () => iamApi.createUser({
@@ -132,10 +139,11 @@ function UserEditor({
       role_slugs: form.role_slugs,
       all_projects: form.all_projects,
       project_codes: form.project_codes,
+      read_only_projects: form.read_only_projects,
       must_change_password: true,
     }),
     onSuccess: () => { toast.success('User created'); onSaved() },
-    onError: (error) => toast.error(getApiError(error)),
+    onError: (error) => { setFormError(getApiError(error)); toast.error(getApiError(error)) },
   })
   const update = useMutation({
     mutationFn: () => iamApi.updateUser(user!.id, {
@@ -144,9 +152,10 @@ function UserEditor({
       role_slugs: form.role_slugs,
       all_projects: form.all_projects,
       project_codes: form.project_codes,
+      read_only_projects: form.read_only_projects,
     }),
     onSuccess: () => { toast.success('User updated'); onSaved() },
-    onError: (error) => toast.error(getApiError(error)),
+    onError: (error) => { setFormError(getApiError(error)); toast.error(getApiError(error)) },
   })
   const toggleActive = useMutation({
     mutationFn: () => iamApi.updateUser(user!.id, { is_active: !user!.is_active }),
@@ -158,7 +167,19 @@ function UserEditor({
   const pending = create.isPending || update.isPending
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (pending) return
+    const next: Record<string, string> = {}
+    if (!form.display_name.trim()) next.display_name = 'Enter a display name.'
+    if (mode === 'create' && !/^[A-Za-z0-9._-]{3,32}$/.test(form.username.trim())) next.username = 'Use 3–32 letters, numbers, dots, underscores, or hyphens.'
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = 'Enter a valid email address.'
+    if (mode === 'create' && form.password.length < 10) next.password = 'Use at least 10 characters.'
+    if (!form.all_projects && !adminSelected && !form.project_codes.length) next.projects = 'Assign at least one project.'
+    if (!form.role_slugs.length) next.roles = 'Assign at least one role.'
+    setErrors(next)
+    setFormError('')
+    if (Object.keys(next).length) { formRef.current?.querySelector<HTMLInputElement>(`[name="${Object.keys(next)[0]}"]`)?.focus(); return }
     if (mode === 'create') create.mutate()
+    else if (JSON.stringify([form.role_slugs, form.all_projects, form.project_codes, form.read_only_projects]) !== JSON.stringify([user?.roles.map(role => role.slug), user?.all_projects, user?.project_codes, user?.read_only_projects || []])) setAccessConfirmOpen(true)
     else update.mutate()
   }
   const toggleRole = (slug: string) => {
@@ -171,8 +192,8 @@ function UserEditor({
     })
   }
   return (
-    <ModalLayer open onClose={() => { if (toggleOpen) setToggleOpen(false); else onClose() }} label={mode === 'create' ? 'New user' : `Edit ${user?.display_name || 'user'}`}>
-      <form className="editor-modal iam-editor" onSubmit={submit} noValidate>
+    <ModalLayer open onClose={() => { if (toggleOpen) setToggleOpen(false); else if (accessConfirmOpen) setAccessConfirmOpen(false); else onClose() }} label={mode === 'create' ? 'New user' : `Edit ${user?.display_name || 'user'}`}>
+      <form ref={formRef} className="editor-modal iam-editor" onSubmit={submit} noValidate>
         <header>
           <div>
             <span className="eyebrow">Access</span>
@@ -181,11 +202,12 @@ function UserEditor({
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </header>
         <div className="editor-body">
+          {(formError || Object.keys(errors).length > 0) && <div className="form-error-banner" role="alert" id="iam-form-errors">{formError || Object.values(errors).join(' ')}</div>}
           <div className="form-grid">
-            <label><span>Display name</span><input value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} required /></label>
-            <label><span>Username</span><input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required disabled={mode === 'edit'} autoComplete="off" /></label>
-            <label className="span-2"><span>Email</span><input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label>
-            {mode === 'create' && <label className="span-2"><span>Temporary password</span><SecretInput value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} minLength={10} required autoComplete="new-password" revealLabel="temporary password" /></label>}
+            <label><span>Display name</span><input name="display_name" aria-invalid={!!errors.display_name} aria-describedby={errors.display_name ? 'iam-form-errors' : undefined} value={form.display_name} onChange={(event) => setForm((current) => ({ ...current, display_name: event.target.value }))} required /></label>
+            <label><span>Username</span><input name="username" aria-invalid={!!errors.username} aria-describedby={errors.username ? 'iam-form-errors' : undefined} value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required disabled={mode === 'edit'} autoComplete="off" /></label>
+            <label className="span-2"><span>Email</span><input name="email" aria-invalid={!!errors.email} aria-describedby={errors.email ? 'iam-form-errors' : undefined} type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label>
+            {mode === 'create' && <label className="span-2"><span>Temporary password</span><SecretInput name="password" aria-invalid={!!errors.password} aria-describedby={errors.password ? 'iam-form-errors' : undefined} value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} minLength={10} required autoComplete="new-password" revealLabel="temporary password" /></label>}
           </div>
           <fieldset>
             <legend>Roles</legend>
@@ -203,8 +225,8 @@ function UserEditor({
           <fieldset>
             <legend>Projects</legend>
             <label className="editor-switch-row">
-              <div><strong>All projects</strong><span>Administrators always have access to every project.</span></div>
-              <span className="switch"><input type="checkbox" checked={form.all_projects || adminSelected} disabled={adminSelected} onChange={(event) => setForm((current) => ({ ...current, all_projects: event.target.checked }))} /><i /></span>
+              <div><strong>All projects</strong><span>Choose project access below. Administrators always have full access.</span></div>
+              <span className="switch"><input type="checkbox" checked={form.all_projects || adminSelected} disabled={adminSelected} onChange={(event) => setForm((current) => ({ ...current, all_projects: event.target.checked, read_only_projects: event.target.checked ? current.read_only_projects : current.read_only_projects.filter(code => current.project_codes.includes(code)) }))} /><i /></span>
             </label>
             {!form.all_projects && !adminSelected && (
               <div className="iam-project-grid">
@@ -213,6 +235,7 @@ function UserEditor({
                     <input type="checkbox" checked={form.project_codes.includes(code)} onChange={() => setForm((current) => ({
                       ...current,
                       project_codes: current.project_codes.includes(code) ? current.project_codes.filter((item) => item !== code) : [...current.project_codes, code],
+                      read_only_projects: current.project_codes.includes(code) ? current.read_only_projects.filter((item) => item !== code) : current.read_only_projects,
                     }))} />
                     <i />
                     {code} · {projectLabels[code] || code}
@@ -220,6 +243,15 @@ function UserEditor({
                 ))}
               </div>
             )}
+            {!adminSelected && <div className="project-access-list">
+              <p className="password-gate-copy">View only allows reading documents, workflow, transmittals, and comments. Role actions remain limited by the selected roles.</p>
+              {projectCodes.filter(code => form.all_projects || form.project_codes.includes(code)).map(code => <label key={code} className="project-access-row">
+                <span><strong>{code}</strong><small>{projectLabels[code] || code}</small></span>
+                <select aria-label={`${code} access`} value={form.role_slugs.every(slug => slug === 'viewer') || form.read_only_projects.includes(code) ? 'view' : 'role'} disabled={form.role_slugs.every(slug => slug === 'viewer')} onChange={event => setForm(current => ({...current, read_only_projects: event.target.value === 'view' ? [...new Set([...current.read_only_projects, code])] : current.read_only_projects.filter(item => item !== code)}))}>
+                  <option value="view">View only</option><option value="role">Role actions</option>
+                </select>
+              </label>)}
+            </div>}
           </fieldset>
         </div>
         <footer>
@@ -228,6 +260,7 @@ function UserEditor({
           <button className="primary-button" type="submit" disabled={pending}>{pending ? <LoaderCircle className="spin" /> : <Check size={16} />} {mode === 'create' ? 'Create user' : 'Save changes'}</button>
         </footer>
       </form>
+      <ConfirmDialog open={accessConfirmOpen} title={`Update access for ${user?.display_name}?`} description={<>Roles: <strong>{roles.filter(role => form.role_slugs.includes(role.slug)).map(role => role.name).join(', ')}</strong>. Projects: <strong>{form.all_projects ? 'All projects' : form.project_codes.join(', ')}</strong>. View only: <strong>{form.role_slugs.every(slug => slug === 'viewer') ? 'Every assigned project' : form.read_only_projects.join(', ') || 'None'}</strong>. Other projects follow the selected roles.</>} confirmLabel="Save access" tone="warning" onClose={() => setAccessConfirmOpen(false)} onConfirm={() => update.mutateAsync()}/>
       {mode === 'edit' && user && <ConfirmDialog
         open={toggleOpen}
         title={`${user.is_active ? 'Disable' : 'Enable'} ${user.display_name}?`}

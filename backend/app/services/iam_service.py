@@ -46,6 +46,7 @@ def user_to_dict(user: User) -> dict:
         "must_change_password": user.must_change_password,
         "password_locked": user.password_locked,
         "all_projects": user.all_projects,
+        "read_only_projects": user.read_only_projects or [],
         "project_codes": [] if user.all_projects else [link.project_code for link in user.project_links],
         "roles": [
             {
@@ -262,6 +263,7 @@ class IamService:
             all_projects=data.all_projects,
             project_codes=data.project_codes,
             must_change_password=data.must_change_password,
+            read_only_projects=data.read_only_projects,
         )
         self.audit(actor, "iam.user_created", "user", str(user.id), {"username": user.username, "roles": data.role_slugs}, ip)
         self.db.commit()
@@ -289,7 +291,7 @@ class IamService:
             if user.is_admin() and ADMIN_ROLE_SLUG not in values["role_slugs"]:
                 self._protect_last_admin(user)
             user.roles = self._roles_from_slugs(values["role_slugs"])
-        if "all_projects" in values or "project_codes" in values:
+        if "all_projects" in values or "project_codes" in values or "read_only_projects" in values or user.is_admin():
             all_projects = values.get("all_projects", user.all_projects)
             project_codes = values.get("project_codes", [link.project_code for link in user.project_links])
             if ADMIN_ROLE_SLUG in user.role_slugs():
@@ -299,6 +301,11 @@ class IamService:
                 raise HTTPException(status_code=400, detail="Assign at least one project, or grant access to all projects")
             user.all_projects = all_projects
             self._replace_projects(user, [] if all_projects else project_codes)
+        read_only = values.get("read_only_projects", user.read_only_projects) or []
+        if user.is_admin():
+            read_only = []
+        self._validate_projects(user.all_projects, [link.project_code for link in user.project_links], read_only)
+        user.read_only_projects = list(dict.fromkeys(read_only))
         self.audit(actor, "iam.user_updated", "user", str(user.id), values, ip)
         self.db.commit()
         self.db.refresh(user)
@@ -340,13 +347,15 @@ class IamService:
             )
         )
 
-    def _create_user(self, *, username: str, display_name: str, email: str | None, password: str, role_slugs: list[str], all_projects: bool, project_codes: list[str], must_change_password: bool, password_locked: bool = False) -> User:
+    def _create_user(self, *, username: str, display_name: str, email: str | None, password: str, role_slugs: list[str], all_projects: bool, project_codes: list[str], must_change_password: bool, password_locked: bool = False, read_only_projects: list[str] | None = None) -> User:
         roles = self._roles_from_slugs(role_slugs)
         if any(role.slug == ADMIN_ROLE_SLUG for role in roles):
             all_projects = True
             project_codes = []
+            read_only_projects = []
         if not all_projects and not project_codes:
             raise HTTPException(status_code=400, detail="Assign at least one project, or grant access to all projects")
+        self._validate_projects(all_projects, project_codes, read_only_projects or [])
         user = User(
             username=username,
             email=email,
@@ -356,12 +365,21 @@ class IamService:
             must_change_password=must_change_password,
             password_locked=password_locked,
             all_projects=all_projects,
+            read_only_projects=list(dict.fromkeys(read_only_projects or [])),
         )
         user.roles = roles
         self.db.add(user)
         self.db.flush()
         self._replace_projects(user, [] if all_projects else project_codes)
         return user
+
+    def _validate_projects(self, all_projects: bool, codes: list[str], read_only: list[str]) -> None:
+        from app.services.settings_service import SettingsService
+        known = set(SettingsService(self.db).project_codes())
+        if not set(codes + read_only).issubset(known):
+            raise HTTPException(status_code=422, detail="Unknown project code in access assignment")
+        if not all_projects and not set(read_only).issubset(codes):
+            raise HTTPException(status_code=422, detail="Read-only projects must be assigned to this account")
 
     def _roles_from_slugs(self, slugs: list[str]) -> list[Role]:
         wanted = list(dict.fromkeys(slugs))

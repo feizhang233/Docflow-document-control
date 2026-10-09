@@ -21,7 +21,7 @@
 | Legal / regulatory copy | Not maintained in this repository | unresolved, no new legal copy introduced | 2026-08-27 |
 | Market / content conventions | `README.md`, `PROJECT_STRUCTURE.md` | product documentation | 2026-08-27 |
 
-Workflow numbering, Workflow comments/state, Aconex matching, and external workflow APIs are explicitly outside this frontend migration.
+Workflow numbering and Aconex matching remain unchanged. The 2026-10-09 access/notification feature adds project read-only overrides and notifications for actual comments changes while retaining workflow-number matching.
 
 ## Visual contract
 
@@ -125,9 +125,14 @@ Workflow numbering, Workflow comments/state, Aconex matching, and external workf
 
 ## Permission and clipboard
 
-- Permission UI strategy: irrelevant navigation/actions are hidden; direct forbidden settings access receives an access-denied state.
+- Permission UI strategy: irrelevant navigation/actions are hidden; view-only Workflow/Transmittal/Settings direct routes redirect to Documents preserving query parameters.
 - Clipboard copy policy: no secret-copy feature exists.
 - Disabled-state explanation: controls with an obvious pending reason use busy state; permission-disabled controls need visible explanatory text.
+- Project access (2026-10-09): `read_only_projects` overrides actions without granting any role permission. Tables/drawers/editors use the canonical `useAuth().can(permission, project)` check; mixed-project bulk actions require permission on every selected record. Reordering is disabled when any row in the page is read-only. The server applies the same restrictions. Global settings and metadata imports are unavailable when an account has read-only projects (source: `API.md`).
+- Access edits use shared `ConfirmDialog` to review roles, project scope, and view-only overrides. Account changes clear cached data; project/role changes refresh on focus and every 30 seconds.
+- Email subscriptions use native project select, shared settings form/cards, Sonner feedback, and `ConfirmDialog` for recipient disclosure and removal. The independent Notification page owns Updates and Email addresses. Subscription pagination is 100; address groups share one header per recipient. Every account may manage up to 5 distinct personal addresses across accessible projects, including view-only projects. Paused addresses count; removing the last project for an address frees a slot. Creation stays in its owning section; failures preserve fields and show inline/dialog errors. Pause/resume is reversible. The configuration notice states when delivery is unavailable. Latest delivery state is displayed as server-reported; no UI claim of inbox receipt is made (source: `API.md`).
+- Comments have a separate bell group. Shared `notificationDestination` sends view-only links to Documents, and every notification includes the owning project for mixed-access navigation. `useWorkspaceAccess` is the canonical browsing-mode owner: Viewer/all-view-only accounts and selected view-only projects show Dashboard/Documents/Notification only. Browsing Dashboard shows recent documents, updates and personal email access. Notification project filtering is applied on the server before limiting to the latest 100 updates.
+- Document Number has no register header/cell in Documents, Workflow or Transmittal and is absent from column settings. Detail/edit identifiers remain available; resetting visibility cannot restore the column.
 
 ## Migration status
 
@@ -147,3 +152,9 @@ Workflow numbering, Workflow comments/state, Aconex matching, and external workf
 - Project audit command/result: recorded in task completion evidence.
 - CRUD full-flow evidence: browser create/view/edit/delete flow when the local backend is available.
 - Failure-path evidence: invalid login, filtered empty, and destructive mutation error state.
+
+### Access/email verification, 2026-10-09
+
+Notification copy and generated email templates default to English (`Content-Language: en`), independently of browser locale. Comments and user-supplied project/document/external content remain in their source language.
+
+Backend tests cover mixed project restrictions, scope-preserving rename, personal subscription isolation, the five-address limit including paused/shared-project addresses, Viewer subscription rights, revoked-project cleanup, project-filtered notification feeds, hidden Document Number column configuration, subscriber authorization, comments creation/removal/deduplication, shared workflow project isolation, bulk import summaries, queued delivery, TLS/Unicode mail construction, retry, pause/delete cancellation, expired leases, and worker startup. Browser verification was attempted but the browser tool blocked the local preview URL; responsive visual/keyboard runtime checks remain unverified in this environment. 68 backend tests, strict static UI audit and frontend lint/build pass. React server rendering with account/project fixtures verifies Viewer, all-view-only and mixed-project navigation, browse Dashboard, Notification sections, permission-aware comments links and removal of Document Number in all three tables. Migration 26 to 27 preserves existing subscription rows and installs owner-specific uniqueness in an isolated SQLite database. Browser visual, keyboard and click flows remain unverified because the local URL was blocked; server rendering does not replace those checks.

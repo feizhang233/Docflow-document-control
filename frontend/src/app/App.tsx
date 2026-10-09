@@ -7,6 +7,7 @@ import { LoginPage } from '../pages/LoginPage'
 const DashboardPage = lazy(() => import('../pages/DashboardPage').then(module => ({ default: module.DashboardPage })))
 const PackagesPage = lazy(() => import('../pages/PackagesPage').then(module => ({ default: module.PackagesPage })))
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then(module => ({ default: module.SettingsPage })))
+const NotificationsPage = lazy(() => import('../pages/NotificationsPage').then(module => ({ default: module.NotificationsPage })))
 
 export function App() {
   return (
@@ -20,6 +21,7 @@ export function App() {
           <Route path="/workflow" element={<PackagesPage kind="workflow" />} />
           <Route path="/transmittal" element={<PackagesPage kind="transmittal" />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

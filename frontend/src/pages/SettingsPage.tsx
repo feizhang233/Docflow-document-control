@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Building2, Check, Download, FileJson, FileSpreadsheet, ListFilter, LoaderCircle, Plus, RotateCcw, Save, Shield, Upload, Workflow, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,6 +31,7 @@ export function SettingsPage() {
   const canExport=can('metadata:export')
   const canImport=can('metadata:import')
   const canIam=can('iam:read')
+  const availableSections: Record<SettingsSection, boolean> = {columns: canSettings, projects: canSettings, workflow: canSettings, backup: canExport || canImport, access: canIam}
   const inputRef=useRef<HTMLInputElement>(null)
   const csvInputRef=useRef<HTMLInputElement>(null)
   const [backup,setBackup]=useState<MetadataBackup|null>(null)
@@ -37,7 +39,8 @@ export function SettingsPage() {
   const [fileName,setFileName]=useState('')
   const [mode,setMode]=useState<ImportMode>('merge')
   const [csvMode,setCsvMode]=useState<ImportMode>('merge')
-  const [section,setSection]=useState<SettingsSection>(()=>canSettings?'columns':canIam?'access':'backup')
+  const [requestedSection,setSection]=useState<SettingsSection>(()=>canSettings?'columns':canIam?'access':'backup')
+  const section = availableSections[requestedSection] ? requestedSection : (Object.keys(availableSections) as SettingsSection[]).find(key => availableSections[key]) || 'backup'
   const [columnRegister,setColumnRegister]=useState<ColumnRegister>('documents')
   const [resetColumnsOpen,setResetColumnsOpen]=useState(false)
   const configs=useQuery({queryKey:['column-configs'],queryFn:settingsApi.listColumns})
@@ -82,6 +85,7 @@ export function SettingsPage() {
     catch(error){setCsvImport(null);toast.error(error instanceof Error?error.message:'This is not a valid document CSV')}
   }
   const visibleCount=configs.data?.filter(item=>columnRegister==='documents'?item.is_visible:columnRegister==='workflow'?item.is_visible_workflow:item.is_visible_transmittal).length||0
+  if (!Object.values(availableSections).some(Boolean)) return <div className="state-panel error"><Shield size={30}/><strong>Settings access denied</strong><span>Your account can view assigned projects. Open Notification to manage your email addresses.</span><Link className="secondary-button" to="/">Return to dashboard</Link></div>
   return <>
     <div className="page-header">
       <div>
@@ -101,7 +105,7 @@ export function SettingsPage() {
         {canIam&&<button type="button" className={section==='access'?'active':''} onClick={()=>setSection('access')}><Shield/><span><strong>Users & access</strong><small>Accounts, roles, projects</small></span></button>}
       </nav>
       <div className="settings-view">
-      {section==='backup'&&<section className="settings-panel wide">
+      {section==='backup'&&(canExport||canImport)&&<section className="settings-panel wide">
         <div className="settings-heading icon-heading">
           <span><FileJson/></span>
           <div>
@@ -198,7 +202,7 @@ export function SettingsPage() {
         </div>
         {workflowConfig.isLoading?<div className="config-loading"><LoaderCircle className="spin"/> Loading workflow settings…</div>:workflowConfig.data?<WorkflowConfigEditor config={workflowConfig.data} onSaved={()=>{queryClient.invalidateQueries({queryKey:['workflow-config']});queryClient.invalidateQueries({queryKey:['packages']});queryClient.invalidateQueries({queryKey:['dashboard-packages']})}}/>:<div className="config-note"><strong>Workflow settings unavailable</strong><span>{workflowConfig.error?getApiError(workflowConfig.error):'Please refresh and try again.'}</span></div>}
       </section>}
-      {section==='access'&&<AccessPanel/>}
+      {section==='access'&&canIam&&<AccessPanel/>}
       {section==='columns'&&canSettings&&<section className="settings-panel wide">
         <div className="settings-heading icon-heading column-settings-heading">
           <span><ListFilter/></span>

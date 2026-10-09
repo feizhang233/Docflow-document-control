@@ -54,6 +54,7 @@ class UserRead(BaseModel):
     must_change_password: bool
     password_locked: bool = False
     all_projects: bool
+    read_only_projects: list[str] = []
     project_codes: list[str] = []
     roles: list[RoleRead] = []
     permissions: list[str] = []
@@ -89,6 +90,7 @@ class UserCreate(BaseModel):
     password: str
     role_slugs: list[str] = Field(min_length=1)
     all_projects: bool = True
+    read_only_projects: list[str] = []
     project_codes: list[str] = []
     must_change_password: bool = True
 
@@ -118,7 +120,7 @@ class UserCreate(BaseModel):
             raise ValueError("Display name is required")
         return cleaned
 
-    @field_validator("project_codes", mode="before")
+    @field_validator("project_codes", "read_only_projects", mode="before")
     @classmethod
     def normalize_projects(cls, value):
         return [str(code).strip().upper() for code in (value or []) if str(code).strip()]
@@ -130,6 +132,7 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     role_slugs: list[str] | None = None
     all_projects: bool | None = None
+    read_only_projects: list[str] | None = None
     project_codes: list[str] | None = None
 
     @field_validator("display_name")
@@ -150,7 +153,7 @@ class UserUpdate(BaseModel):
         cleaned = str(value).strip().lower()
         return cleaned or None
 
-    @field_validator("project_codes", mode="before")
+    @field_validator("project_codes", "read_only_projects", mode="before")
     @classmethod
     def normalize_projects(cls, value):
         if value is None:

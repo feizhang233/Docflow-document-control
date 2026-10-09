@@ -6,7 +6,9 @@ PERMISSIONS: list[tuple[str, str, str]] = [
     ("metadata:export", "Export metadata and CSV", "Backup"),
     ("metadata:import", "Import metadata and CSV", "Backup"),
     ("notifications:read", "View notifications", "Notifications"),
+    ("notifications:subscribe", "Manage own notification emails", "Notifications"),
     ("notifications:write", "Clear notifications", "Notifications"),
+    ("notifications:manage", "Manage project email subscriptions", "Notifications"),
     ("iam:read", "View users, roles, and audit events", "Access"),
     ("iam:write", "Manage users and access", "Access"),
 ]
@@ -30,7 +32,9 @@ ROLES: dict[str, dict] = {
             "metadata:export",
             "metadata:import",
             "notifications:read",
+            "notifications:subscribe",
             "notifications:write",
+            "notifications:manage",
         ],
     },
     "editor": {
@@ -41,13 +45,14 @@ ROLES: dict[str, dict] = {
             "packages:write",
             "metadata:export",
             "notifications:read",
+            "notifications:subscribe",
             "notifications:write",
         ],
     },
     "viewer": {
         "name": "Viewer",
         "description": "Read-only access to assigned projects.",
-        "permissions": ["packages:read", "notifications:read"],
+        "permissions": ["packages:read", "notifications:read", "notifications:subscribe"],
     },
 }
 

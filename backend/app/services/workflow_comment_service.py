@@ -1,9 +1,13 @@
 from collections.abc import Sequence
+from datetime import timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.workflow_comment import WorkflowComment
+from app.models.package import Package
+from app.services.email_notification_service import EmailNotificationService
+from app.services.notification_service import NotificationService
 from app.schemas.workflow_comment import (
     WorkflowCommentInput,
     WorkflowCommentsBulkImportResult,
@@ -42,6 +46,20 @@ class WorkflowCommentService:
         if not number:
             raise ValueError("workflow_number is required")
 
+        previous = self.list_for_workflow_number(number)
+        def utc_timestamp(timestamp):
+            if timestamp and timestamp.tzinfo:
+                timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+            return timestamp
+        def signature(comment):
+            return (comment.external_id, comment.author, comment.body, utc_timestamp(comment.commented_at))
+        if [signature(comment) for comment in previous] == [signature(comment) for comment in comments]:
+            return previous
+
+        def describe(snapshot):
+            return "\n\n".join(f"{comment.author or 'Unknown author'}{f' · {comment.commented_at}' if comment.commented_at else ''}\n{comment.body}" for comment in snapshot) or "(no comments)"
+        details = f"Workflow {number} comments updated\n\nPrevious comments:\n{describe(previous)}\n\nCurrent comments:\n{describe(comments)}"
+
         self.db.execute(
             delete(WorkflowComment).where(WorkflowComment.workflow_number == number)
         )
@@ -51,12 +69,29 @@ class WorkflowCommentService:
                 external_id=comment.external_id,
                 author=comment.author,
                 body=comment.body,
-                commented_at=comment.commented_at,
+                commented_at=utc_timestamp(comment.commented_at),
                 order_index=index,
             )
             for index, comment in enumerate(comments)
         ]
         self.db.add_all(items)
+        self.db.flush()
+        # A shared workflow may have documents in several projects. Notify each
+        # project once, using only the documents visible in that project.
+        by_project = {}
+        for package in self.db.scalars(select(Package).where(Package.workflow_number == number).order_by(Package.id)):
+            by_project.setdefault(package.project_code, []).append(package)
+        for project, packages in by_project.items():
+            primary = packages[0]
+            NotificationService(self.db)._create_update(
+                notification_type="workflow_comments", title=f"Workflow comments · {number}",
+                package_id=primary.id, workflow_number=number, document_number=primary.document_number,
+                message=details, commit=False,
+            )
+            EmailNotificationService(self.db).enqueue(
+                project_code=project, event_types=["workflow_comments"], subject=f"[DocFlow · {project}] Workflow comments · {number}",
+                body=f"Documents: {', '.join(package.document_number for package in packages)}\n\n{details}", package_id=primary.id,
+            )
         if commit:
             self.db.commit()
             for item in items:

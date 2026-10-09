@@ -28,7 +28,7 @@ def combine_update_message(custom_message: str | None, details: str) -> str:
 
 class NotificationService:
     def __init__(self, db: Session): self.db = db
-    def _create_update(self, *, notification_type: str, title: str, package_id: int, workflow_number: str | None, document_number: str, message: str):
+    def _create_update(self, *, notification_type: str, title: str, package_id: int, workflow_number: str | None, document_number: str, message: str, commit: bool = True):
         item = Notification(
             package_id=package_id,
             notification_type=notification_type,
@@ -37,18 +37,26 @@ class NotificationService:
             workflow_number=workflow_number,
             document_number=document_number,
         )
-        self.db.add(item); self.db.commit(); self.db.refresh(item); return item
-    def create_submission_progress_update(self, *, package_id: int, workflow_number: str | None, document_number: str, message: str):
+        self.db.add(item)
+        if commit:
+            self.db.commit()
+            self.db.refresh(item)
+        else:
+            self.db.flush()
+        return item
+    def create_submission_progress_update(self, *, package_id: int, workflow_number: str | None, document_number: str, message: str, commit: bool = True):
         return self._create_update(
             notification_type="submission_progress",
             title=f"Submission progress · {document_number}",
             package_id=package_id, workflow_number=workflow_number, document_number=document_number, message=message,
+            commit=commit,
         )
-    def create_workflow_feedback_update(self, *, package_id: int, workflow_number: str | None, document_number: str, message: str):
+    def create_workflow_feedback_update(self, *, package_id: int, workflow_number: str | None, document_number: str, message: str, commit: bool = True):
         return self._create_update(
             notification_type="workflow_feedback",
             title=f"Workflow feedback · {workflow_number or document_number}",
             package_id=package_id, workflow_number=workflow_number, document_number=document_number, message=message,
+            commit=commit,
         )
     def _project_filter(self, allowed_projects: list[str] | None):
         if allowed_projects is None:

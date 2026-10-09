@@ -244,7 +244,7 @@ def test_column_config_and_metadata_backup(client):
     assert fractional.status_code == 200, fractional.text
     assert fractional.json()["column_width"] == 184
     reset = client.post("/api/settings/columns/reset")
-    assert reset.status_code == 200 and len(reset.json()) == 11
+    assert reset.status_code == 200 and len(reset.json()) == 10
     discipline = next(item for item in reset.json() if item["field_name"] == "discipline")
     assert discipline["display_name"] == "Discipline"
     assert discipline["is_visible"] is True and discipline["column_width"] == 110
@@ -737,3 +737,16 @@ def test_submission_and_feedback_updates_create_separate_notification_categories
     assert {item["package_id"] for item in notifications["items"]} == {created["id"]}
     feedback_notification = next(item for item in notifications["items"] if item["notification_type"] == "workflow_feedback")
     assert "UTIBER approval: A – Approved" in feedback_notification["message"]
+
+
+def test_document_number_column_cannot_be_restored_but_identifier_remains(client, anon_client):
+    from tests.helpers import login
+    item = client.post("/api/packages", json=payload()).json()
+    assert client.post("/api/settings/columns/reset").status_code == 200
+    assert "document_number" not in {column["field_name"] for column in client.get("/api/settings/columns").json()}
+    assert client.put("/api/settings/columns/document_number", json={"is_visible": True, "input_type": "text", "options": []}).status_code == 404
+    for register in ["workflow", "transmittal"]:
+        assert client.put(f"/api/settings/columns/document_number/visibility?register={register}", json={"is_visible": True}).status_code == 404
+    login(anon_client, "guest", "1234567890")
+    assert "document_number" not in {column["field_name"] for column in anon_client.get("/api/settings/columns").json()}
+    assert anon_client.get(f"/api/packages/{item['id']}").json()["document_number"] == item["document_number"]
