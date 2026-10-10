@@ -52,11 +52,11 @@ DEFAULT_COLUMN_CONFIGS = {
 class SettingsService:
     def __init__(self, db: Session): self.db = db
     def list_configs(self):
-        items = list(self.db.scalars(select(ColumnConfig).where(ColumnConfig.field_name != "document_number")))
+        items = list(self.db.scalars(select(ColumnConfig).where(ColumnConfig.field_name != "number_of_documents")))
         order = {field_name:index for index,field_name in enumerate(DEFAULT_COLUMN_CONFIGS)}
         return sorted(items, key=lambda item:(order.get(item.field_name, len(order)), item.id))
     def update_config(self, field_name: str, data: ColumnConfigUpdate):
-        if field_name == "document_number" or field_name not in CONFIGURABLE_FIELDS: return None
+        if field_name == "number_of_documents" or field_name not in CONFIGURABLE_FIELDS: return None
         item = self.db.scalar(select(ColumnConfig).where(ColumnConfig.field_name == field_name))
         if not item: return None
         if data.display_name is not None: item.display_name = data.display_name
@@ -85,7 +85,7 @@ class SettingsService:
             item.project_option_colors = {}
         self.db.commit(); self.db.refresh(item); return item
     def update_register_visibility(self, field_name: str, register: str, is_visible: bool):
-        if field_name == "document_number" or field_name not in CONFIGURABLE_FIELDS or register not in {"workflow", "transmittal"}: return None
+        if field_name == "number_of_documents" or field_name not in CONFIGURABLE_FIELDS or register not in {"workflow", "transmittal"}: return None
         item = self.db.scalar(select(ColumnConfig).where(ColumnConfig.field_name == field_name))
         if not item: return None
         setattr(item, f"is_visible_{register}", is_visible)

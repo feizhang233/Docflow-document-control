@@ -345,4 +345,4 @@ Lost MySQL connections return `503` and reset the connection pool so the next re
 
 The left sidebar exposes Notification as an independent entry with Updates and Email addresses sections. A Viewer, an account with all assigned projects set to view only, or a mixed-access account browsing a view-only project sees only Dashboard, Documents and Notification. Direct Workflow, Transmittal and Settings routes redirect to Documents while preserving project and record query parameters. A mixed-access account regains its role interface when it selects an editable project.
 
-Document Number is removed from every register table and from column settings. It cannot be restored through column visibility/reset endpoints. The document identifier remains in detail/edit forms, stored data, exports and integrations.
+Document Number remains visible and configurable in every register. The Docs (`number_of_documents`) column is removed from Documents, Workflow, Transmittal and column settings for all accounts, and cannot be restored through column visibility/reset endpoints. The document count remains in detail/edit forms, stored data, exports and integrations.

@@ -739,14 +739,24 @@ def test_submission_and_feedback_updates_create_separate_notification_categories
     assert "UTIBER approval: A – Approved" in feedback_notification["message"]
 
 
-def test_document_number_column_cannot_be_restored_but_identifier_remains(client, anon_client):
+def test_docs_column_removed_and_document_number_restored_for_all_accounts(client, anon_client):
     from tests.helpers import login
     item = client.post("/api/packages", json=payload()).json()
     assert client.post("/api/settings/columns/reset").status_code == 200
-    assert "document_number" not in {column["field_name"] for column in client.get("/api/settings/columns").json()}
-    assert client.put("/api/settings/columns/document_number", json={"is_visible": True, "input_type": "text", "options": []}).status_code == 404
+    fields = {column["field_name"] for column in client.get("/api/settings/columns").json()}
+    assert "document_number" in fields
+    assert "number_of_documents" not in fields
+    assert client.put("/api/settings/columns/document_number", json={"is_visible": True, "input_type": "text", "options": [], "column_width": 200}).status_code == 200
+    assert client.put("/api/settings/columns/number_of_documents", json={"is_visible": True, "input_type": "text", "options": []}).status_code == 404
     for register in ["workflow", "transmittal"]:
-        assert client.put(f"/api/settings/columns/document_number/visibility?register={register}", json={"is_visible": True}).status_code == 404
+        assert client.put(f"/api/settings/columns/document_number/visibility?register={register}", json={"is_visible": True}).status_code == 200
+        assert client.put(f"/api/settings/columns/number_of_documents/visibility?register={register}", json={"is_visible": True}).status_code == 404
+    backup = client.get("/api/metadata/export").json()
+    assert backup["packages"][0]["number_of_documents"] == item["number_of_documents"]
     login(anon_client, "guest", "1234567890")
-    assert "document_number" not in {column["field_name"] for column in anon_client.get("/api/settings/columns").json()}
-    assert anon_client.get(f"/api/packages/{item['id']}").json()["document_number"] == item["document_number"]
+    fields = {column["field_name"] for column in anon_client.get("/api/settings/columns").json()}
+    assert "document_number" in fields
+    assert "number_of_documents" not in fields
+    saved = anon_client.get(f"/api/packages/{item['id']}").json()
+    assert saved["document_number"] == item["document_number"]
+    assert saved["number_of_documents"] == item["number_of_documents"]

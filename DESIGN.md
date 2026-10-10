@@ -98,7 +98,7 @@ Primary actions are solid blue; neutral actions are bordered or ghost. Warning r
 
 ### Navigation and data display
 
-The active sidebar item uses a soft blue surface, bright icon, and a 3px route marker. Tables use sticky headers, tabular identifiers, visible overflow, stable pagination, and compact/comfortable density variants. Charts keep text legends as the accessible alternative. Notification is a dedicated sidebar region for project updates and personal email addresses. View-only project browsing retains Dashboard, Documents and Notification with a document-focused dashboard; mixed-access accounts follow the selected project. Register tables omit Document Number while retaining identifiers in record details. Email address cards group project subscriptions under one recipient heading.
+The active sidebar item uses a soft blue surface, bright icon, and a 3px route marker. Tables use sticky headers, tabular identifiers, visible overflow, stable pagination, and compact/comfortable density variants. Charts keep text legends as the accessible alternative. Notification is a dedicated sidebar region for project updates and personal email addresses. View-only project browsing retains Dashboard, Documents and Notification with a document-focused dashboard; mixed-access accounts follow the selected project. Register tables retain Document Number and omit the Docs count column; document counts remain available in record details. Email address cards group project subscriptions under one recipient heading.
 
 ### Forms and overlays
 
