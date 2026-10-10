@@ -1043,9 +1043,6 @@ html[data-theme='dark'] .settings-nav button.active>svg{color:#9eb2ff;background
 }
 
 /* Personal notification workspace and browsing mode reuse the shared shell. */
-.sidebar-notification-region{margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border)}
-.sidebar-notification-region>.sidebar-workspace-label{display:block;margin:0 0 8px;padding:0 12px}
-.sidebar.desktop-collapsed .sidebar-notification-region>.sidebar-workspace-label{display:none}
 .notification-page-tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--color-border)}
 .notification-page-tabs button{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 18px;background:transparent;border:0;border-bottom:2px solid transparent;color:var(--color-muted);font-weight:600}
 .notification-page-tabs button.active{color:var(--color-primary);border-bottom-color:var(--color-primary)}
@@ -1074,7 +1071,6 @@ html[data-theme='dark'] .settings-nav button.active>svg{color:#9eb2ff;background
 .browse-dashboard-hero .route-rail-stages small{font-size:10px}
 .email-address-card h3>svg{flex-shrink:0}
 .email-address-card h3>span{min-width:0;overflow-wrap:anywhere}
-@media(max-width:900px){.sidebar.desktop-collapsed .sidebar-notification-region>.sidebar-workspace-label{display:block}}
 
 /* Native disclosure keeps sender setup available without leaving personal subscriptions. */
 .email-delivery-guide{margin-top:16px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface-muted);font-size:13px;line-height:1.6;color:var(--color-text)}

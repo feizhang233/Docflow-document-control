@@ -60,9 +60,9 @@ export function Sidebar({ mobileOpen, collapsed, onClose, onToggleCollapsed }: {
         </div>
         {!viewOnly&&<NavLink to={projectUrl('/workflow')} className="nav-item" onClick={onClose} aria-label="Workflow" title={collapsed?'Workflow':undefined}><Repeat2 size={18}/><span>Workflow</span></NavLink>}
         {!viewOnly&&<NavLink to={projectUrl('/transmittal')} className="nav-item" onClick={onClose} aria-label="Transmittal" title={collapsed?'Transmittal':undefined}><Send size={18}/><span>Transmittal</span></NavLink>}
-        <div className="sidebar-notification-region"><span className="sidebar-workspace-label">Updates</span><NavLink to={projectUrl('/notifications')} className="nav-item" onClick={onClose} aria-label="Notification" title={collapsed?'Notification':undefined}><Bell size={18}/><span>Notification</span></NavLink></div>
       </nav>
       <div className="sidebar-bottom">
+        <NavLink to={projectUrl('/notifications')} className="nav-item" onClick={onClose} aria-label="Notification" title={collapsed?'Notification':undefined}><Bell size={18}/><span>Notification</span></NavLink>
         {showSettings&&<NavLink to="/settings" className="nav-item" onClick={onClose} aria-label="Settings" title={collapsed?'Settings':undefined}><Settings size={18}/><span>Settings</span></NavLink>}
       </div>
     </aside>

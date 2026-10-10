@@ -87,6 +87,7 @@ Workflow numbering and Aconex matching remain unchanged. The 2026-10-09 access/n
 - Route error / 403 page behavior: dedicated in-shell explanation with return to dashboard; login is only for unauthenticated users.
 - Breadcrumb/tab/route-state policy: breadcrumbs encode Document Control → Project → Register; settings tabs are peer sections.
 - Sidebar/drawer/bottom-sheet transformation: persistent/collapsible desktop sidebar with one directional toggle anchored in the Workspace heading; its expanded state and accessible label stay synchronized. Below 900px, navigation becomes a modal left drawer with a separate top-bar trigger and no desktop collapse control.
+- Notification sits immediately above Settings in the shared bottom navigation, using the same `NavLink` and `.nav-item` treatment without a separate Updates heading or region. It remains available when Settings is hidden for view-only browsing, retains the selected project in its destination, and closes the mobile navigation on selection.
 - Responsive table strategy: horizontal table scrolling with visible synced overflow; no silent column removal.
 - Truncation/full-value access: identifiers remain readable; full record is available through the View action/drawer.
 - Focus restoration and sticky-obstruction policy: dialogs return focus, sticky topbar uses scroll padding, and modal actions remain reachable.
@@ -168,3 +169,7 @@ The clarified requirement restores Document Number in every register and removes
 ### Sending mailbox instructions, 2026-10-10
 
 Frontend lint/build, 68 backend tests and strict static UI audit pass. React server rendering confirms the native disclosure contains the four setup steps, container recreation command and official provider help links. Existing browser access restrictions still leave visual/keyboard runtime checks unverified. This change adds setup instructions only; no live SMTP credentials were configured and no real email was sent.
+
+### Sidebar notification placement, 2026-10-10
+
+Frontend lint/build, 68 backend tests and strict static UI audit pass. React rendering with editing and view-only fixtures confirms Notification is in the shared bottom navigation, directly before Settings when available, for expanded, collapsed and mobile-open states. The selected project and active-route indicator are retained. The obsolete notification region is absent from markup and styles. Design tokens are unchanged. Browser visual/keyboard checks remain unverified under the existing access restriction; the official DESIGN linter is unavailable because its package is not cached locally.
