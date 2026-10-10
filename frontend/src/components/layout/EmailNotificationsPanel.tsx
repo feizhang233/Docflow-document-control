@@ -9,6 +9,7 @@ import { emailSubscriptionsApi, getApiError } from '../../lib/api'
 import { notificationDate } from '../../lib/notifications'
 import { emailEventLabels, type EmailEventType, type EmailSubscription } from '../../types/notification'
 import { ConfirmDialog } from '../common/ConfirmDialog'
+import { EmailDeliverySetupGuide } from './EmailDeliverySetupGuide'
 
 export function EmailNotificationsPanel() {
   const {can} = useAuth()
@@ -48,7 +49,8 @@ export function EmailNotificationsPanel() {
   }
   return <section className="settings-panel wide">
     <div className="settings-heading icon-heading"><span><Mail/></span><div><h2>Your notification emails</h2><p>Save up to 5 email addresses for your account. Each address can follow multiple projects you can view.</p></div><strong className="email-address-count">{query.data?.address_count || 0} / {limit}</strong></div>
-    {query.data && !query.data.mail_configured && <div className="config-note email-setup-note"><strong>Email delivery is not enabled yet</strong><span>Your subscriptions are saved. Ask your administrator to enable email delivery.</span></div>}
+    {query.data && !query.data.mail_configured && <div className="config-note email-setup-note"><strong>Email delivery is not enabled yet</strong><span>Your subscriptions are saved. An administrator must connect a sending mailbox on the server. Open the setup guide below for instructions.</span></div>}
+    <EmailDeliverySetupGuide/>
     <form className="email-subscription-form" noValidate onSubmit={submit}>
       <div className="form-grid">
         <label><span>Project</span><select value={selectedProject} onChange={event => setProject(event.target.value)} disabled={!projects.length}>{projects.map(code => <option key={code} value={code}>{code} · {labels[code]}</option>)}</select></label>
