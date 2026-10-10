@@ -1,33 +1,33 @@
-# DocFlow 发件邮箱设置说明
+# DocFlow Sending Mailbox Setup Guide
 
-DocFlow 已有订阅、变更队列和邮件发送功能，但需要连接一个实际的 **SMTP 发件服务**。它负责将项目变更发给各账户保存的通知邮箱。
+DocFlow supports email subscriptions, a change queue and outgoing email delivery. To send notifications, connect it to an actual **SMTP mail service**. This service sends project updates to the notification addresses saved by each account.
 
-- **发件邮箱**：管理员在部署服务器上统一配置，所有账户和 Project 共用这一发送服务。
-- **收件邮箱**：每个账户在左侧 **Notification → Email addresses** 中设置，最多 5 个不同地址，可分别订阅多个 Project。
+- **Sending mailbox:** An administrator configures it on the deployment server. All accounts and projects share this sending service.
+- **Recipient addresses:** Each account manages its own addresses under **Notification → Email addresses** in the left sidebar. An account can save up to 5 distinct addresses and subscribe each address to multiple projects.
 
-添加收件邮箱不会自动设置发件邮箱。页面中的 **How to set up the sending mailbox** 可展开查看英文设置说明。
+Adding a recipient does not configure a sending mailbox. Expand **How to set up the sending mailbox** on the same page to read the in-app instructions.
 
-## 1. 准备发件账户
+## 1. Prepare the sending account
 
-从邮箱服务商或公司邮件管理员取得以下信息：SMTP 服务器、端口、加密方式、登录账号、SMTP 密码或应用专用密码，以及允许使用的发件地址。
+Obtain the SMTP hostname, port, security mode, login username, SMTP password or app password, and approved sender address from your email provider or company mail administrator.
 
-当前版本支持 SMTP 用户名和密码认证，以及可信内部服务器的免认证转发。若服务商只允许 OAuth 登录，当前版本不能直接连接，应使用公司批准的、兼容 SMTP 的邮件转发服务。SMTP 不需要配置收邮件的 POP/IMAP 服务。
+The current version supports SMTP username/password authentication and unauthenticated delivery through a trusted internal relay. If your provider requires OAuth, use an approved, compatible SMTP relay; DocFlow cannot connect directly using OAuth. POP or IMAP settings are not required for outgoing email.
 
-### Gmail 示例
+### Gmail example
 
-如果 Google 账户支持应用专用密码：
+If app passwords are available for your Google account:
 
-1. 在 Google 账户中启用 **2-Step Verification**。
-2. 打开 [App passwords](https://myaccount.google.com/apppasswords)，为 DocFlow 创建一个应用专用密码。
-3. 使用完整 Gmail 地址作为登录账号，并使用生成的应用专用密码。
+1. Enable **2-Step Verification** in your Google account.
+2. Open [App passwords](https://myaccount.google.com/apppasswords) and create an app password for DocFlow.
+3. Use your full Gmail address as the username and the generated app password as the SMTP password.
 
-应用专用密码可能因组织账户或账户安全策略而不可用；这时请向邮件管理员取得兼容的发送服务。修改 Google 账户密码后，旧应用专用密码会被撤销，需要重新生成并更新服务器配置。参见 [Google 官方说明](https://support.google.com/accounts/answer/185833?hl=en)。
+App passwords may be unavailable because of organization or account security policies. In that case, ask your mail administrator for a compatible sending service. Changing your Google account password revokes existing app passwords; generate a new one and update the server configuration. See [Google's app password instructions](https://support.google.com/accounts/answer/185833?hl=en).
 
-以下示例采用 Gmail 的 `smtp.gmail.com`、端口 `587` 和 `starttls`，依据 [Gmail 官方 SMTP 设置](https://support.google.com/mail/answer/7104828?hl=en)。
+The example below uses Gmail's `smtp.gmail.com`, port `587` and `starttls`, as documented in [Gmail's SMTP settings](https://support.google.com/mail/answer/7104828?hl=en).
 
-## 2. 修改部署服务器的配置
+## 2. Update the deployment server configuration
 
-对于仓库默认的 Docker Compose 部署，在**实际服务器上的项目目录**找到与 `docker-compose.yml` 同级的 `.env`，修改或加入以下字段。不要覆盖原有数据库密码、API 密钥等配置；`.env.example` 仅供参考，修改它不会改变正在运行的服务。
+For the repository's default Docker Compose deployment, edit the existing `.env` file beside `docker-compose.yml` in the **project directory on the actual deployment server**. Add or update the following fields. Preserve existing database passwords, API keys and other settings. `.env.example` is a reference; editing it does not change the running service.
 
 ```dotenv
 SMTP_HOST=smtp.gmail.com
@@ -41,64 +41,64 @@ EMAIL_POLL_SECONDS=30
 PUBLIC_APP_URL=https://your-docflow-site.com
 ```
 
-将示例中的账号、密码和网站地址换成实际值。密码放在单引号内可避免 Docker Compose 将其中的 `$` 当作变量；密码本身若包含单引号，应按部署环境的规则转义。凭据仅保存在服务器配置中，不要提交到 GitHub，也不要填入 Notification 的收件邮箱表单。
+Replace the example account, password and website address with your actual values. Single-quote the password to prevent Docker Compose from interpreting a `$` in it as a variable. If the password itself contains a single quote, escape it according to your deployment environment's rules. Keep credentials in the server configuration; do not commit them to GitHub or enter them in the Notification recipient form.
 
-| 配置项 | 填写内容 |
+| Setting | What to enter |
 | --- | --- |
-| `SMTP_HOST` | 服务商提供的发件服务器名称，不包含 `https://` |
-| `SMTP_PORT` | 服务商要求的端口 |
-| `SMTP_SECURITY` | `starttls` 通常配合 587；`ssl` 通常配合 465；以服务商要求为准。`plain` 仅用于可信内部转发服务 |
-| `SMTP_USERNAME` | 发件账户的 SMTP 登录账号，可能是完整邮箱地址，也可能是服务商专门分配的账号 |
-| `SMTP_PASSWORD` | SMTP 密码、授权码或应用专用密码，以服务商要求为准 |
-| `SMTP_FROM_EMAIL` | 收件人看到的发件邮箱，必须是服务商允许该账号使用的地址 |
-| `SMTP_TIMEOUT_SECONDS` | 单次连接超时，默认 15 秒 |
-| `EMAIL_POLL_SECONDS` | 检查待发邮件的间隔，默认 30 秒 |
-| `PUBLIC_APP_URL` | 用户实际访问的 DocFlow 网站地址，用于邮件中的文档链接；留空则不加入链接 |
+| `SMTP_HOST` | The provider's outgoing mail hostname, without `https://` |
+| `SMTP_PORT` | The port required by your provider |
+| `SMTP_SECURITY` | Usually `starttls` with 587 or `ssl` with 465; follow your provider's requirements. Use `plain` only for a trusted internal relay |
+| `SMTP_USERNAME` | The sending account's SMTP username, which may be its full email address or a provider-specific login |
+| `SMTP_PASSWORD` | The SMTP password, authorization code or app password required by your provider |
+| `SMTP_FROM_EMAIL` | The sender address shown to recipients; the provider must allow the sending account to use this address |
+| `SMTP_TIMEOUT_SECONDS` | Connection timeout in seconds; default 15 |
+| `EMAIL_POLL_SECONDS` | Interval between checks for queued email; default 30 seconds |
+| `PUBLIC_APP_URL` | The public DocFlow website address used for document links; leave blank to omit links |
 
-其他邮箱服务商使用相同字段，替换服务器、账号和加密方式即可。公司转发服务器只有在明确允许免认证时才可留空 `SMTP_USERNAME` 和 `SMTP_PASSWORD`。
+Other email providers use the same fields. Substitute their hostname, credentials and security mode. Leave `SMTP_USERNAME` and `SMTP_PASSWORD` blank only when your company relay explicitly allows unauthenticated delivery.
 
-## 3. 让配置生效
+## 3. Apply the configuration
 
-在部署服务器的项目目录执行：
+Run this in the project directory on the deployment server:
 
 ```bash
 docker compose up -d --force-recreate backend
 ```
 
-这会重新创建后端容器并载入新的配置，保留已有数据库卷。仅执行 `docker compose restart backend` 不会更新容器环境变量，参见 [Docker 官方说明](https://docs.docker.com/reference/cli/docker/compose/restart/)。重新创建的行为参见 [docker compose up](https://docs.docker.com/reference/cli/docker/compose/up/)。
+This recreates the backend container and loads the new configuration while preserving the existing database volume. A simple `docker compose restart backend` does not update container environment variables. See [Docker's restart documentation](https://docs.docker.com/reference/cli/docker/compose/restart/) and [docker compose up](https://docs.docker.com/reference/cli/docker/compose/up/).
 
-如果服务器还需要安装最新应用代码（包括新的页面说明），先更新代码，然后执行：
+If you also need to install updated application code, including the new in-app instructions, update the code first, then run:
 
 ```bash
 docker compose up -d --build
 ```
 
-非 Docker 部署：将上述变量写入后端进程的服务配置，或后端工作目录的 `.env`，再重启该后端进程。修改本地电脑的 `.env` 不会改变远端服务器的发件配置。
+For a non-Docker installation, add these variables to the backend service configuration or the `.env` file in the backend's working directory, then restart that backend process. Editing a `.env` file on your local computer does not change the remote server's mail settings.
 
-## 4. 测试实际发送
+## 4. Test actual delivery
 
-1. 打开 **Notification → Email addresses**，先添加自己的收件邮箱。
-2. 选择可以访问的 Project 和通知类型；测试评论通知时勾选 **Comments**，保持订阅 **Active**。
-3. 用具有该 Project 编辑权限的账户修改一条文档，或通过现有同步功能同步一次实际的评论变更。仅查看账户可接收通知，但不能修改文档来触发测试。
-4. 等待后台处理，默认每 30 秒检查一次队列；若已有积压或重试，可能需要更久。
-5. 查看订阅中的 **Last email** 和自己的收件箱、垃圾邮件文件夹。
+1. Open **Notification → Email addresses** and add your own recipient address first.
+2. Select an accessible project and the update types to receive. Select **Comments** when testing comment notifications, and keep the subscription **Active**.
+3. Use an account with editing access to make a real document change in that project, or synchronize an actual comment change through the existing synchronization feature. View-only accounts can receive notifications but cannot edit documents to trigger a test.
+4. Wait for processing. The backend checks the queue every 30 seconds by default; queued mail or retries may take longer.
+5. Check **Last email** on the subscription and your inbox and spam folder.
 
-`Email delivery is not enabled yet` 提示消失，只说明已填写 `SMTP_HOST` 和 `SMTP_FROM_EMAIL`，不代表账号认证或网络连接已经通过。必须通过实际收到测试邮件确认发送成功。
+When **Email delivery is not enabled yet** disappears, it only means `SMTP_HOST` and `SMTP_FROM_EMAIL` are populated. It does not confirm authentication or connectivity. Confirm that a test email actually arrives.
 
-`Last email: sent` 表示邮件服务器接受了邮件，不代表收件人已收到或阅读。邮件模板默认英语，文档内容和 comments 保持原文；评论变更包含之前和当前内容。
+**Last email: sent** means the mail server accepted the message; it does not confirm that a recipient received or read it. Email templates default to English. Document content and comments retain their original language, and comment updates include previous and current content.
 
-启用发送后，已有的有效待发队列会自动处理。订阅只记录添加之后的变更；暂停订阅会取消其待发邮件，恢复后只发送新的变更。
+Valid queued updates are processed automatically when sending is enabled. Subscriptions record changes made after they are added. Pausing cancels queued email for that subscription; resuming sends only new changes.
 
-## 5. 常见问题
+## 5. Troubleshooting
 
-| 现象 | 检查方法 |
+| Symptom | What to check |
 | --- | --- |
-| 仍显示未启用 | 确认修改的是实际部署目录的 `.env`，已填写服务器和发件地址，并重新创建后端容器；刷新页面 |
-| 一直 queued 或发生连接错误 | 检查服务器域名、端口和加密方式；确认部署服务器允许连接服务商的 SMTP 端口，并且后端正常运行 |
-| 认证失败 | 检查 SMTP 登录账号及密码；若服务商要求授权码或应用专用密码，使用对应凭据；确认该账户允许 SMTP 登录 |
-| 发件地址被拒绝 | 将 `SMTP_FROM_EMAIL` 改为当前账号或服务商已批准的发送地址 |
-| 没有产生邮件 | 确认 Project、通知类型及 Active 状态正确，账户仍有项目权限，并发生了真实变更；相同同步内容和行排序不会发送邮件 |
-| sent 但收件箱没有 | 检查垃圾邮件、邮箱过滤规则及服务商投递记录；使用自有域名时按邮件服务商要求检查域名发送认证 |
-| 修改配置后仍失败 | 重新创建后端，使新配置生效；系统会自动重试最多 5 次，最终 failed 后可点击订阅卡片中的 **Retry** |
+| Delivery still shows as disabled | Edit the actual deployment directory's `.env`, fill in the hostname and sender address, recreate the backend container, then refresh the page |
+| Email remains queued or a connection error appears | Check the hostname, port and security mode; confirm that the deployment server can reach the provider's SMTP port and the backend is running |
+| Authentication fails | Verify the SMTP username and credential; use an authorization code or app password when required, and confirm SMTP login is allowed for the account |
+| The sender address is rejected | Set `SMTP_FROM_EMAIL` to the sending account or another address approved by the provider |
+| No email is generated | Check the project, update types, Active state and current project access; trigger a real change. Identical synchronization content and row reordering do not send email |
+| Status is sent but the inbox is empty | Check spam, mailbox rules and the provider's delivery records. For a custom domain, check sender-domain authentication as required by your mail provider |
+| Delivery still fails after changing settings | Recreate the backend to load the new values. Delivery is attempted up to 5 times; after the final failed attempt, use **Retry** on the subscription card |
 
-排查服务器启动问题时可使用 `docker compose ps backend` 和 `docker compose logs --tail=100 backend`。页面会显示简化后的发送错误，不包含密码或服务商的完整响应。邮件发送失败不会撤销已保存的文档或评论变更。
+To inspect server startup problems, use `docker compose ps backend` and `docker compose logs --tail=100 backend`. The page shows a simplified delivery error without passwords or the provider's full response. A mail delivery failure does not undo saved document or comment changes.
