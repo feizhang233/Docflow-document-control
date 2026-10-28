@@ -5,6 +5,7 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 ## Features
 
 - Sign-in, roles, and project-scoped access (Administrator, Document Controller, Editor, Viewer), with per-project View only / Role actions
+- Persistent 24-hour sign-in across tab/browser and backend restarts, automatic access renewal, and immediate session revocation on sign-out
 - Dashboard with package and workflow health metrics
 - Documents register with This Week (default), This Month, This Year, and All views
 - Dedicated Workflow and Transmittal registers with correct default sorting
@@ -15,6 +16,7 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 - JSON metadata backup/restore with merge and full-replace modes
 - CSV document import/export with merge and full-replace modes
 - Per-column text/dropdown configuration with custom option lists
+- Drag register column handles to customize their order; right-click headers or open Columns to show/hide fields, with database-backed layout preferences saved separately for each account and register
 - Settings editor for Submission stage names/order, Feedback reviewer names, and A/B/C/P labels
 - Categorized Submission Progress, Workflow Feedback, and Comments notifications with unread state
 - Personal notification emails (up to 5 per account), project subscriptions including comments, pause/resume, a durable queue, and automatic retries
@@ -40,6 +42,8 @@ DocFlow is a maintainable first-version engineering document control system (Bas
 3. Open `http://localhost`. API documentation is available at `http://localhost:8000/api/docs`.
 
 The backend applies Alembic migrations on startup. When `SEED_DEMO_DATA=true`, it inserts twelve sample packages only if the table is empty.
+
+Sign-in lasts 24 hours from the successful login (`AUTH_SESSION_HOURS=24`), with automatic renewal of short-lived access during that period (`AUTH_ACCESS_MINUTES=30`). Closing and reopening the browser restores the same valid session. Keep the database and `AUTH_SECRET` unchanged across backend restarts. Signing out ends that session immediately; activity does not extend the original deadline. Temporary connection failures offer Retry without clearing sign-in cookies. The browser stores no credentials or private records for offline sign-in.
 
 ## Local development
 
@@ -86,6 +90,7 @@ Frontend verification:
 ```bash
 cd frontend
 npm run build
+npm run test:auth
 ```
 
 ## Ubuntu VPS deployment
@@ -106,6 +111,6 @@ To enable outgoing email, an administrator must configure one sending mailbox on
 
 Add or update `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM_EMAIL`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_SECURITY` in the deployed project's existing `.env`, preserving its database/account configuration. `.env.example` is a reference only. Use `starttls` with port 587 or `ssl` with port 465 as required by your provider; the current transport supports SMTP username/password or a trusted unauthenticated relay, not OAuth. Set `PUBLIC_APP_URL` to include document links, then run `docker compose up -d --force-recreate backend` in that deployment directory. A simple Docker restart does not reload environment variables. Use `docker compose up -d --build` when installing updated application code. With no mail configuration, subscriptions and queued changes are still saved. After configuration, valid queued email is processed automatically. The setup notice only checks that a hostname and sender are present; test actual delivery to your own mailbox before adding project recipients.
 
-Migration `20261009_26` adds project read-only overrides and email subscription/outbox tables; `20261009_27` makes subscriptions personal to their account owner. Docker startup applies the migrations and refreshes the role catalog. Local development must run `alembic upgrade head` and `python -m app.seed` before starting the API. SMTP failure cannot roll back the document change; failed delivery can be retried in Notification.
+Migration `20261009_26` adds project read-only overrides and email subscription/outbox tables; `20261009_27` makes subscriptions personal to their account owner. Migration `20261028_28` adds personal column visibility preferences, `20261028_29` adds saved column order while retaining existing choices, and `20261028_30` adds stable 24-hour login sessions; deploy the updated backend and frontend together. Docker startup applies the migrations and refreshes the role catalog. Local development must run `alembic upgrade head` and `python -m app.seed` before starting the API. SMTP failure cannot roll back the document change; failed delivery can be retried in Notification.
 
 View-only browsing shows **Dashboard, Documents and Notification** only. Workflow/Transmittal/Settings direct links return to Documents. The interface follows the selected project for accounts with mixed access. Document Number is retained in all register tables. The Docs (document count) column is absent from register tables and column settings; detail/edit forms, exports and stored counts retain it.

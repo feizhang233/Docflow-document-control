@@ -1,39 +1,8 @@
 import axios from 'axios'
+import { client } from './httpClient'
 import type { EmailEventType, EmailSubscription, EmailSubscriptionList } from '../types/notification'
-import type { AuditEventList, AuthUser, Permission, Role, UserCreateInput, UserList, UserUpdateInput } from '../types/iam'
-import type { ColumnConfig, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, Period, ProjectCode, ProjectConfig, TransmittalSuggestions, WorkflowCommentList, WorkflowConfig } from '../types/package'
-
-const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 12_000,
-  withCredentials: true,
-})
-
-client.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const original = error.config as { url?: string; _retry?: boolean } | undefined
-    const url = original?.url || ''
-    if (error.response?.status === 401 && original && !original._retry && !url.includes('/auth/')) {
-      original._retry = true
-      try {
-        await client.post('/auth/refresh')
-        return client(original)
-      } catch {
-        window.dispatchEvent(new Event('docflow:unauthorized'))
-      }
-    }
-    return Promise.reject(error)
-  },
-)
-
-export const authApi = {
-  login: async (username: string, password: string) => (await client.post<AuthUser>('/auth/login', { username, password })).data,
-  logout: async () => client.post('/auth/logout'),
-  me: async () => (await client.get<AuthUser>('/auth/me')).data,
-  refresh: async () => (await client.post<AuthUser>('/auth/refresh')).data,
-  changePassword: async (current_password: string, new_password: string) => (await client.post<AuthUser>('/auth/change-password', { current_password, new_password })).data,
-}
+import type { AuditEventList, AuthUser, Role, UserCreateInput, UserList, UserUpdateInput } from '../types/iam'
+import type { AccountColumnPreferences, ColumnConfig, ColumnPreferencesPatch, CsvImportRow, MetadataBackup, NotificationList, Package, PackageInput, PackageListResponse, PageKind, Period, ProjectCode, ProjectConfig, TransmittalSuggestions, WorkflowCommentList, WorkflowConfig } from '../types/package'
 
 export const iamApi = {
   listUsers: async () => (await client.get<UserList>('/iam/users')).data,
@@ -41,7 +10,6 @@ export const iamApi = {
   updateUser: async (id: number, data: UserUpdateInput) => (await client.patch<AuthUser>(`/iam/users/${id}`, data)).data,
   resetPassword: async (id: number, password: string, must_change_password = true) => (await client.post<AuthUser>(`/iam/users/${id}/reset-password`, { password, must_change_password })).data,
   listRoles: async () => (await client.get<Role[]>('/iam/roles')).data,
-  listPermissions: async () => (await client.get<Permission[]>('/iam/permissions')).data,
   listAudit: async (limit = 40) => (await client.get<AuditEventList>('/iam/audit', { params: { limit } })).data,
 }
 
@@ -79,6 +47,8 @@ export const packagesApi = {
 
 export const settingsApi = {
   listColumns: async () => (await client.get<ColumnConfig[]>('/settings/columns')).data,
+  getMyColumns: async (register: PageKind, accountId: number) => (await client.get<AccountColumnPreferences>('/settings/me/columns', { params: { register }, headers: { 'X-Account-ID': accountId } })).data,
+  updateMyColumns: async (register: PageKind, data: ColumnPreferencesPatch, accountId: number) => (await client.put<AccountColumnPreferences>('/settings/me/columns', data, { params: { register }, headers: { 'X-Account-ID': accountId } })).data,
   updateColumn: async (field: string, data: Pick<ColumnConfig, 'display_name'|'is_visible'|'column_width'|'input_type'|'options'|'option_colors'> & Partial<Pick<ColumnConfig, 'share_options'|'project_options'|'project_option_colors'>>) => (await client.put<ColumnConfig>(`/settings/columns/${field}`, data)).data,
   updateColumnVisibility: async (field: string, register: 'workflow'|'transmittal', is_visible: boolean) => (await client.put<ColumnConfig>(`/settings/columns/${field}/visibility`, {is_visible}, {params:{register}})).data,
   resetColumns: async () => (await client.post<ColumnConfig[]>('/settings/columns/reset')).data,

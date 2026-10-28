@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 from app.core.auth import client_ip, get_current_user
-from app.core.security import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
+from app.core.security import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, decode_session_token, set_auth_cookies
 from app.db.session import get_db
 from app.models.iam import User
 from app.schemas.iam import ChangePasswordRequest, LoginRequest, UserRead
@@ -31,7 +32,6 @@ def login(data: LoginRequest, request: Request, response: Response, db: Session 
 def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.cookies.get(REFRESH_COOKIE)
     if not token:
-        from fastapi import HTTPException
         raise HTTPException(status_code=401, detail="Not authenticated")
     user, access, refresh_value = IamService(db).rotate_refresh(
         token,
@@ -44,21 +44,18 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
 
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    from jwt import InvalidTokenError
-    from app.core.security import decode_jwt
-    from app.models.iam import User as IamUser
     token = request.cookies.get(REFRESH_COOKIE)
     user = None
+    session_id = None
     access = request.cookies.get(ACCESS_COOKIE)
     if access:
         try:
-            payload = decode_jwt(access)
-            user = db.get(IamUser, int(payload.get("sub")))
-        except (InvalidTokenError, TypeError, ValueError):
+            _, user_id, session_id = decode_session_token(access, "access")
+            user = db.get(User, user_id)
+        except InvalidTokenError:
             user = None
-    IamService(db).logout(token, user, ip=client_ip(request))
+    IamService(db).logout(token, user, ip=client_ip(request), session_id=session_id)
     clear_auth_cookies(response, _proto(request))
-    response.status_code = 204
 
 
 @router.get("/me", response_model=UserRead)

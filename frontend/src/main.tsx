@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { AuthProvider } from './hooks/useAuth'
+import { AuthProvider } from './app/AuthProvider'
 import { App } from './app/App'
 import './styles/index.css'
 

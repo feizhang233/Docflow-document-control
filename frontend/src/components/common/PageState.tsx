@@ -6,6 +6,6 @@ export function LoadingState() {
 export function EmptyState({ filtered = false }: { filtered?: boolean }) {
   return <div className="state-panel"><FileSearch size={30}/><strong>{filtered ? 'No matching documents' : 'No documents yet'}</strong><span>{filtered ? 'Try changing your search or filters.' : 'Create a document to begin the workflow.'}</span></div>
 }
-export function ErrorState({ message, retry }: { message: string; retry: () => void }) {
-  return <div className="state-panel error"><AlertTriangle size={30}/><strong>Could not load documents</strong><span>{message}</span><button className="secondary-button" onClick={retry}><RefreshCw size={15}/> Try again</button></div>
+export function ErrorState({ message, retry, title = 'Could not load documents' }: { message: string; retry: () => void; title?: string }) {
+  return <div className="state-panel error"><AlertTriangle size={30}/><strong>{title}</strong><span>{message}</span><button className="secondary-button" onClick={retry}><RefreshCw size={15}/> Try again</button></div>
 }

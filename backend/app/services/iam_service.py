@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from fastapi import HTTPException
 from jwt import InvalidTokenError
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.iam_catalog import (
@@ -22,7 +22,7 @@ from app.core.iam_catalog import (
 )
 from app.core.security import (
     access_token,
-    decode_jwt,
+    decode_session_token,
     hash_password,
     hash_token,
     refresh_token as encode_refresh_token,
@@ -34,6 +34,7 @@ from app.schemas.iam import UserCreate, UserUpdate
 
 MAX_FAILED_LOGINS = 8
 LOCK_MINUTES = 15
+REFRESH_RETRY_GRACE_SECONDS = 10
 
 
 def user_to_dict(user: User) -> dict:
@@ -189,7 +190,7 @@ class IamService:
         user.failed_login_count = 0
         user.locked_until = None
         user.last_login_at = now
-        access, refresh = self._issue_session(user, ip=ip, user_agent=user_agent)
+        access, refresh = self.issue_session(user, ip=ip, user_agent=user_agent)
         self.audit(user, "auth.login", "user", str(user.id), {}, ip)
         self.db.commit()
         self.db.refresh(user)
@@ -197,28 +198,94 @@ class IamService:
 
     def rotate_refresh(self, token: str, *, ip: str | None, user_agent: str | None) -> tuple[User, str, str]:
         try:
-            payload = decode_jwt(token)
+            payload, user_id, session_id = decode_session_token(token, "refresh")
         except InvalidTokenError:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        if payload.get("typ") != "refresh":
+        supplied_hash = hash_token(token)
+        for _attempt in range(2):
+            query = select(RefreshToken).where(
+                RefreshToken.id == session_id if session_id is not None else or_(
+                    RefreshToken.token_hash == supplied_hash,
+                    RefreshToken.previous_token_hash == supplied_hash,
+                )
+            ).with_for_update().execution_options(populate_existing=True)
+            stored = self.db.scalar(query)
+            now = utcnow()
+            if not stored or stored.user_id != user_id or stored.revoked_at:
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            user = self.db.get(User, user_id)
+            if not user or not user.is_active or ("sv" in payload and payload["sv"] != user.session_version):
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            legacy = stored.refresh_nonce is None or stored.rotated_at is None
+            deadline = stored.expires_at
+            if legacy:
+                # Old seven-day tokens migrate only while their original row
+                # is less than 24 hours old. They never receive a new clock.
+                deadline = min(deadline, stored.created_at + timedelta(hours=settings.auth_session_hours))
+            if deadline <= now:
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            if stored.token_hash != supplied_hash:
+                if legacy or stored.previous_token_hash != supplied_hash or not stored.previous_valid_until or stored.previous_valid_until <= now:
+                    raise HTTPException(status_code=401, detail="Not authenticated")
+                refresh = self._stored_refresh(user, stored)
+                return self._refreshed_session(user, stored.id, deadline, refresh)
+            retry_until = stored.previous_valid_until or (stored.rotated_at + timedelta(seconds=REFRESH_RETRY_GRACE_SECONDS) if stored.rotated_at else now)
+            if not legacy and retry_until > now:
+                # Do not create another generation during a retry window: all
+                # overlapping tabs receive the same persisted successor.
+                refresh = self._stored_refresh(user, stored)
+                return self._refreshed_session(user, stored.id, deadline, refresh)
+            nonce = secrets.token_urlsafe(24)
+            issued_at = now.replace(microsecond=0)
+            refresh = encode_refresh_token(user.id, nonce, session_id=stored.id, session_version=user.session_version, expires_at=deadline, issued_at=issued_at)
+            # The compare-and-swap also serializes SQLite, where FOR UPDATE is
+            # ignored. A losing concurrent refresh retries the saved successor.
+            result = self.db.execute(update(RefreshToken).where(
+                RefreshToken.id == stored.id,
+                RefreshToken.token_hash == supplied_hash,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > now,
+            ).values(
+                token_hash=hash_token(refresh),
+                refresh_nonce=nonce,
+                rotated_at=issued_at,
+                previous_token_hash=supplied_hash,
+                previous_valid_until=min(now + timedelta(seconds=REFRESH_RETRY_GRACE_SECONDS), deadline),
+                expires_at=deadline,
+                user_agent=(user_agent or "")[:255] or None,
+                ip_address=ip,
+            ), execution_options={"synchronize_session": False})
+            if result.rowcount == 1:
+                return self._refreshed_session(user, stored.id, deadline, refresh)
+            self.db.rollback()
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    def _stored_refresh(self, user: User, stored: RefreshToken) -> str:
+        refresh = encode_refresh_token(user.id, stored.refresh_nonce, session_id=stored.id, session_version=user.session_version, expires_at=stored.expires_at, issued_at=stored.rotated_at)
+        if hash_token(refresh) != stored.token_hash:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        stored = self.db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_token(token)))
-        now = utcnow()
-        if not stored or stored.revoked_at or stored.expires_at <= now:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        user = self.db.get(User, stored.user_id)
-        if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        stored.revoked_at = now
-        access, refresh = self._issue_session(user, ip=ip, user_agent=user_agent)
+        return refresh
+
+    def _refreshed_session(self, user: User, session_id: int, deadline: datetime, refresh: str) -> tuple[User, str, str]:
+        access = access_token(user.id, user.session_version, session_id=session_id, expires_at=deadline)
         self.db.commit()
         self.db.refresh(user)
         return user, access, refresh
 
-    def logout(self, token: str | None, user: User | None, *, ip: str | None) -> None:
+    def logout(self, token: str | None, user: User | None, *, ip: str | None, session_id: int | None = None) -> None:
         if token:
-            stored = self.db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_token(token)))
-            if stored and not stored.revoked_at:
+            try:
+                _, owner_id, refresh_session_id = decode_session_token(token, "refresh")
+                stored = self.db.get(RefreshToken, refresh_session_id) if refresh_session_id is not None else self.db.scalar(select(RefreshToken).where(or_(RefreshToken.token_hash == hash_token(token), RefreshToken.previous_token_hash == hash_token(token))))
+                if stored and stored.user_id == owner_id:
+                    stored.revoked_at = utcnow()
+                    if user is None:
+                        user = self.db.get(User, owner_id)
+            except InvalidTokenError:
+                pass
+        if user and session_id is not None:
+            stored = self.db.get(RefreshToken, session_id)
+            if stored and stored.user_id == user.id:
                 stored.revoked_at = utcnow()
         if user:
             self.audit(user, "auth.logout", "user", str(user.id), {}, ip)
@@ -427,21 +494,22 @@ class IamService:
             raise HTTPException(status_code=400, detail="Cannot remove the last active administrator")
 
     def issue_session(self, user: User, *, ip: str | None, user_agent: str | None) -> tuple[str, str]:
-        return self._issue_session(user, ip=ip, user_agent=user_agent)
-
-    def _issue_session(self, user: User, *, ip: str | None, user_agent: str | None) -> tuple[str, str]:
-        token_id = secrets.token_urlsafe(16)
-        refresh = encode_refresh_token(user.id, token_id)
-        self.db.add(
-            RefreshToken(
-                user_id=user.id,
-                token_hash=hash_token(refresh),
-                expires_at=utcnow() + timedelta(days=settings.auth_refresh_days),
-                user_agent=(user_agent or "")[:255] or None,
-                ip_address=ip,
-            )
+        now = utcnow().replace(microsecond=0)
+        stored = RefreshToken(
+            user_id=user.id,
+            token_hash=hash_token(secrets.token_urlsafe(32)),
+            refresh_nonce=secrets.token_urlsafe(24),
+            rotated_at=now,
+            expires_at=now + timedelta(hours=settings.auth_session_hours),
+            created_at=now,
+            user_agent=(user_agent or "")[:255] or None,
+            ip_address=ip,
         )
-        return access_token(user.id, user.session_version), refresh
+        self.db.add(stored)
+        self.db.flush()
+        refresh = encode_refresh_token(user.id, stored.refresh_nonce, session_id=stored.id, session_version=user.session_version, expires_at=stored.expires_at, issued_at=now)
+        stored.token_hash = hash_token(refresh)
+        return access_token(user.id, user.session_version, session_id=stored.id, expires_at=stored.expires_at), refresh
 
     def _revoke_all_sessions(self, user_id: int) -> None:
         now = utcnow()

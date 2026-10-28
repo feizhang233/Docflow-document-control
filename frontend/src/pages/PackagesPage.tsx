@@ -5,6 +5,7 @@ import { useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getApiError, packagesApi, settingsApi } from '../lib/api'
 import { useAuth } from '../hooks/useAuth'
+import { useColumnPreferences } from '../hooks/useColumnPreferences'
 import { feedbackSteps, submissionSteps, type FilterRule, type Package, type PackageInput, type PageKind, type Period, type WorkflowConfig } from '../types/package'
 import { EmptyState, ErrorState, LoadingState } from '../components/common/PageState'
 import { PackageTable } from '../components/packages/PackageTable'
@@ -76,6 +77,7 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
   const params = { period, project_code: selectedProject === 'ALL' ? undefined : selectedProject, search: search || undefined, discipline: discipline || undefined, transmittal_prefix: kind === 'transmittal' ? (transmittalPrefix || undefined) : undefined, sort_by: sortBy, sort_order: sortOrder, page, page_size: pageSize }
   const query = useQuery({ queryKey: ['packages', params], queryFn: () => packagesApi.list(params), placeholderData: (previous) => previous })
   const configs = useQuery({ queryKey: ['column-configs'], queryFn: settingsApi.listColumns })
+  const columnPreferences = useColumnPreferences(kind, configs.data || [])
   const workflowQuery = useQuery({ queryKey: ['workflow-config'], queryFn: settingsApi.getWorkflow })
   const workflowConfig = workflowQuery.data || defaultWorkflowConfig
   const currentSubmissionSteps = workflowConfig.submission_steps
@@ -467,10 +469,14 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
           </div>
           <div className="legend"><i className="done" /> Complete <i /> Pending</div>
         </div>
-        {query.isLoading ? (
+        {query.isLoading || configs.isLoading || columnPreferences.preferences.isLoading ? (
           <LoadingState />
         ) : query.isError ? (
           <ErrorState message={getApiError(query.error)} retry={() => query.refetch()} />
+        ) : configs.isError ? (
+          <ErrorState message="Could not load column settings." retry={() => configs.refetch()} />
+        ) : columnPreferences.preferences.isError ? (
+          <ErrorState message="Could not load your saved column settings." retry={() => columnPreferences.preferences.refetch()} />
         ) : !visibleItems.length ? (
           <EmptyState filtered={!!search || !!discipline || !!transmittalPrefix || !!filters.length} />
         ) : (
@@ -478,7 +484,12 @@ export function PackagesPage({ kind }: { kind: PageKind }) {
             items={visibleItems}
             highlightedPackageId={highlightedPackageId}
             kind={kind}
-            configs={configs.data || []}
+            configs={columnPreferences.configs}
+            columnOrder={columnPreferences.columnOrder}
+            onColumnOrderChange={columnPreferences.setColumnOrder}
+            onColumnVisibilityChange={columnPreferences.setVisibility}
+            columnVisibilitySaving={columnPreferences.saving}
+            columnVisibilityReady={columnPreferences.preferences.isSuccess}
             submissionSteps={currentSubmissionSteps}
             submissionStepsFor={stepsForProject}
             feedbackReviewers={currentFeedbackReviewers}

@@ -30,3 +30,15 @@
 ```
 
 Routes stay thin; service classes own business behavior and repositories own queries. Column input settings, workflow structure, and metadata backups are stored in MySQL and versioned through Alembic. Future external systems should be added through dedicated adapters and invoked by a worker or scheduler rather than added to HTTP route files.
+
+| Frontend owner | Responsibility |
+| --- | --- |
+| `src/app/AuthProvider.tsx` | Restore the current user, own authentication state, and clear account-specific UI/cache state |
+| `src/hooks/useAuth.ts` | Expose the authentication context to components |
+| `src/lib/httpClient.ts` | Authenticated HTTP transport, renewal, cookie-operation sequencing and session events |
+| `src/lib/api.ts` | Domain API methods and response-error presentation |
+| `src/lib/columns.ts` | Shared register column order, labels, visibility, configuration and width descriptors |
+| `src/components/packages/PackageTable.tsx` | Coordinate table layout, selection, column order and row order |
+| `PackageColumnHeader`, `PackageColumnChooser`, `PackageTableRow` | Own header drag/sort/resize, column controls, and row rendering/actions respectively |
+
+Backend token claims are decoded through `core/security.py::decode_session_token`; `IamService.issue_session` owns session creation. Versioned migrations remain intact even when obsolete runtime code is removed.

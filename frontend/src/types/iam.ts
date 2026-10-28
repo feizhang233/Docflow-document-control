@@ -21,13 +21,6 @@ export interface Role {
   permissions: string[]
 }
 
-export interface Permission {
-  id: number
-  code: string
-  name: string
-  category: string
-}
-
 export interface AuthUser {
   id: number
   username: string

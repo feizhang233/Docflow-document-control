@@ -8,10 +8,11 @@
     "Select/Listbox": "native",
     "Date": "native"
   },
-  "requiredCommands": ["lint", "build", "backend-tests"],
+  "requiredCommands": ["lint", "build", "auth-tests", "backend-tests"],
   "commands": {
     "lint": "cd frontend && npm run lint",
     "build": "cd frontend && npm run build",
+    "auth-tests": "cd frontend && npm run test:auth",
     "backend-tests": "cd backend && .venv/bin/pytest -q"
   },
   "evidence": {

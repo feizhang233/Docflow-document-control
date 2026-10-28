@@ -13,6 +13,8 @@ Set secrets in `.env` before deployment:
 ```env
 EXTERNAL_API_KEY=replace_with_a_long_random_api_key
 AUTH_SECRET=replace_with_a_long_random_secret
+AUTH_ACCESS_MINUTES=30
+AUTH_SESSION_HOURS=24
 BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_PASSWORD=replace_with_a_strong_password
 BOOTSTRAP_ADMIN_NAME=Administrator
@@ -29,14 +31,22 @@ Never commit a production key or place it in a query string.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | Sign in with username/email and password; sets auth cookies |
-| `POST` | `/api/auth/refresh` | Rotate the refresh cookie and issue a new access cookie |
-| `POST` | `/api/auth/logout` | Revoke the current refresh token and clear cookies |
+| `POST` | `/api/auth/refresh` | Renew short-lived access within the original login session deadline |
+| `POST` | `/api/auth/logout` | Revoke the current login session, including access tokens, and clear cookies |
 | `GET` | `/api/auth/me` | Current user, roles, permissions, and project scope |
 | `POST` | `/api/auth/change-password` | Change the signed-in user's password |
 
 Login body: `{ "username": "admin", "password": "…" }`. Change-password body: `{ "current_password": "…", "new_password": "…" }` (minimum 10 characters). Authenticated user payloads include `password_locked`.
 
 Responses: `200` authenticated payload, `401` invalid/expired session or credentials, `400` current password incorrect or the account password is locked.
+
+Sign-in is retained for **24 hours from login** by default (`AUTH_SESSION_HOURS=24`). Both HttpOnly cookies have persistent `Max-Age` and `Expires` values, so closing a tab or browser does not end a valid session. Access tokens retain their short 30-minute lifetime (`AUTH_ACCESS_MINUTES=30`); `/auth/refresh` restores access after that interval. Every new access token, refresh token, and cookie is capped at the login session's original absolute deadline. Refreshing, reopening, or active use does not restart that clock. A successful password change revokes prior sessions and starts a new 24-hour session.
+
+Session state is stored in the database and access/refresh tokens refer to its stable session ID. Keeping the same database and `AUTH_SECRET` preserves sign-in across backend restarts. Logout immediately invalidates both access and refresh tokens for that session; other signed-in browsers remain active. Password reset, password change, and account deactivation revoke the affected account's prior sessions. Live user status and permissions continue to be checked for authenticated requests.
+
+Refresh normally rotates the stored refresh credential. Parallel requests using the preceding credential may retry for up to ten seconds and receive the **same persisted successor**, without creating another session or extending expiration. Rotation is suppressed inside this retry window, and every retry still checks expiration, account status, session version, and revocation. Only token hashes and reconstruction metadata are stored, never raw refresh credentials.
+
+Migration `20261028_30` preserves existing refresh rows. Legacy access tokens without a stable session ID return `401` and can be recovered through `/auth/refresh` only while the legacy refresh row is less than 24 hours old; the renewed session expires at that row's creation time plus 24 hours, or its earlier existing expiration. Older legacy rows cannot be extended. `AUTH_REFRESH_DAYS` is retired and no longer controls session duration; use `AUTH_SESSION_HOURS`.
 
 ### Identity and access
 
@@ -319,6 +329,8 @@ Lifecycle fields accepted by create/update and included in metadata backups are 
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/settings/columns` | Read Document design and per-register visibility configuration |
+| `GET` | `/api/settings/me/columns?register=documents\|workflow\|transmittal` | Read the signed-in account's saved column visibility and order |
+| `PUT` | `/api/settings/me/columns?register=documents\|workflow\|transmittal` | Save either/both personal column settings, e.g. `{ "visibility": { "feedback": false }, "column_order": ["document_title", "document_number"] }` |
 | `PUT` | `/api/settings/columns/{field}` | Update Document column labels, width, visibility, and input options. Initiator and Discipline also accept `share_options` and per-project `project_options` / `project_option_colors` |
 | `PUT` | `/api/settings/columns/{field}/visibility?register=workflow\|transmittal` | Update visibility only for the selected register |
 | `GET` | `/api/settings/workflow` | Read Submission stages, Feedback reviewers, A/B/C/P labels, and Transmittal filter prefixes |
@@ -328,6 +340,10 @@ Lifecycle fields accepted by create/update and included in metadata backups are 
 | `POST` | `/api/metadata/import?mode=replace` | Replace current metadata from a backup |
 | `POST` | `/api/metadata/import-csv?mode=merge` | Merge document rows parsed from a CSV file |
 | `POST` | `/api/metadata/import-csv?mode=replace` | Replace the document register with CSV rows |
+
+Both personal-preference endpoints accept an optional integer `X-Account-ID` header identifying the account the caller expects to be signed in. The server compares it with the authenticated account and returns `409` with a reload instruction on mismatch, without reading or changing preferences. The header never selects an account. Browser clients should always send it to guard against a sign-in change in another tab; clients omitting it retain the existing authenticated-session behavior.
+
+Personal column preferences require authentication and are available to every account, including read-only viewers. The account is taken from the authenticated session; callers cannot select another user. Both endpoints return `{ "register": "documents", "visibility": { "feedback": false }, "column_order": ["document_title", "document_number"] }`. An empty visibility map follows shared visibility defaults, and an empty `column_order` uses the register's default ordering. PUT requires at least one of `visibility` or `column_order`, rejects explicit nulls, merges supplied visibility fields, and replaces the order only when supplied. Omitted properties and all other registers retain their saved values, including during concurrent saves. Visibility values must be JSON booleans; order accepts a unique list of up to ten supported field names. A partial order places those fields first and the frontend appends omitted fields in default register order. Supported fields are `document_number`, `document_title`, `document_date`, `document_type`, `initiator`, `discipline`, `transmittal_number`, `workflow_number`, `submission_progress`, and `feedback`. Explicit `true` overrides a hidden shared default, and explicit `false` hides a column. Preferences are persisted independently of login sessions, shared column settings, and metadata exports/imports; resetting shared columns does not erase personal choices.
 
 `PUT /api/settings/workflow` requires 1–12 unique `submission_steps`, exactly two unique `feedback_reviewers`, labels for all four fixed status codes (`A`, `B`, `C`, `P`), and at least one `transmittal_prefixes` entry. Optional `project_submission_steps` maps a project code to its own 1–12 stage names; omitted projects use the default `submission_steps`. Existing document progress is remapped by stage position when a list changes. Workflow configuration is included in metadata exports and restores. Legacy `Signature Process` and `Workflow Initiation` names are merged into `Workflow Prepare`.
 

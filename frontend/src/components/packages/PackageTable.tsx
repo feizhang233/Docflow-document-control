@@ -1,18 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { createPortal } from 'react-dom'
-import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Copy, Eye, GripVertical, MoreHorizontal, OctagonX, Paperclip, Pencil, RotateCcw, Trash2 } from 'lucide-react'
-import type { ColumnConfig, ColumnField, FeedbackStatusCode, Package, PageKind } from '../../types/package'
-import { columnOptionColorsFor } from '../../lib/projects'
-import { ProgressTrack } from '../common/ProgressTrack'
-import { StatusBadge } from '../common/StatusBadge'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { closestCenter, DndContext, type CollisionDetection, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { horizontalListSortingStrategy, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { Columns3 } from 'lucide-react'
+import type { ColumnConfig, ColumnField, FeedbackStatusCode, Package, PageKind, RegisterColumnField } from '../../types/package'
+import { moveVisibleRegisterColumn, primaryRegisterColumn, registerColumns } from '../../lib/columns'
 import { SyncedHorizontalScroll } from '../common/SyncedHorizontalScroll'
-import { FeedbackStatus } from './FeedbackStatus'
-import { ConfirmDialog } from '../common/ConfirmDialog'
-import { useDismissableLayer } from '../../hooks/useDismissableLayer'
-interface Props {
+import { PackageColumnHeader } from './PackageColumnHeader'
+import { PackageColumnChooser, type ColumnMenuAnchor } from './PackageColumnChooser'
+import { PackageTableRow, type PackageRowActions } from './PackageTableRow'
+
+interface Props extends PackageRowActions {
   items: Package[]
   highlightedPackageId: number | null
   kind: PageKind
@@ -30,295 +27,56 @@ interface Props {
   onToggleSelectAll?: () => void
   onSort: (key: string) => void
   onColumnResize: (field: ColumnField, width: number) => void
-  onView: (item: Package) => void
-  onEdit: (item: Package) => void
+  onColumnVisibilityChange: (visibility: Partial<Record<ColumnField, boolean>>) => void
+  columnOrder?: RegisterColumnField[]
+  onColumnOrderChange: (order: RegisterColumnField[]) => void
+  columnVisibilitySaving?: boolean
+  columnVisibilityReady?: boolean
   onReorder: (ids: number[]) => void
-  onAdvance?: (item: Package) => void
-  onDuplicate: (item: Package) => void
-  onToggleAbandoned: (item: Package) => void
-  onToggleTerminate: (item: Package) => void
-  onDelete: (item: Package) => void | Promise<unknown>
   canWrite?: boolean
   canDelete?: boolean
   canWriteProject?: (code: string) => boolean
   canDeleteProject?: (code: string) => boolean
 }
 
-const styleFor = (config?: ColumnConfig): CSSProperties | undefined =>
-  config ? { width: config.column_width, minWidth: config.column_width, maxWidth: config.column_width } : undefined
-
-function Header({
-  label, field, config, sortBy, sortOrder, onSort, onResize,
-}: {
-  label: string
-  field?: string
-  config?: ColumnConfig
-  sortBy: string
-  sortOrder: string
-  onSort: (s: string) => void
-  onResize?: (field: ColumnField, width: number, commit?: boolean) => void
-}) {
-  const beginResize = (event: React.PointerEvent<HTMLSpanElement>) => {
-    if (!config || !onResize) return
-    event.preventDefault()
-    event.stopPropagation()
-    const startX = event.clientX
-    const startWidth = config.column_width
-    let width = startWidth
-    const clampWidth = (value: number) => Math.min(500, Math.max(72, Math.round(value)))
-    document.body.classList.add('resizing-column')
-    // API requires integer column_width; mouse deltas are often fractional (e.g. 183.5 → 422).
-    const move = (moveEvent: PointerEvent) => {
-      width = clampWidth(startWidth + moveEvent.clientX - startX)
-      onResize(config.field_name, width)
-    }
-    const end = () => {
-      onResize(config.field_name, clampWidth(width), true)
-      document.body.classList.remove('resizing-column')
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end, { once: true })
-  }
-  return (
-    <th
-      scope="col"
-      style={styleFor(config)}
-      aria-sort={field && sortBy === field ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
-    >
-      {field ? (
-        <button className="sort-button" onClick={() => onSort(field)}>
-          {label}
-          {sortBy === field ? (sortOrder === 'asc' ? <ArrowUp /> : <ArrowDown />) : <ArrowUpDown />}
-        </button>
-      ) : label}
-      {config && onResize && (
-        <span className="column-resize-handle" role="separator" aria-label={`Resize ${label}`} onPointerDown={beginResize} />
-      )}
-    </th>
-  )
-}
-
-function RowMenu({
-  item,
-  onDuplicate,
-  onToggleAbandoned,
-  onToggleTerminate,
-  onDelete,
-  canWrite = true,
-  canDelete = true,
-}: {
-  item: Package
-  onDuplicate: (item: Package) => void
-  onToggleAbandoned: (item: Package) => void
-  onToggleTerminate: (item: Package) => void
-  onDelete: (item: Package) => void | Promise<unknown>
-  canWrite?: boolean
-  canDelete?: boolean
-}) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [coords, setCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const popoverRef = useRef<HTMLDivElement>(null)
-  const menuRef = useDismissableLayer<HTMLDivElement>(menuOpen && !deleteOpen, () => setMenuOpen(false), [popoverRef])
-
-  useLayoutEffect(() => {
-    if (!menuOpen) {
-      setCoords(null)
-      return
-    }
-    const updatePosition = () => {
-      const button = buttonRef.current
-      if (!button) return
-      const rect = button.getBoundingClientRect()
-      const menuHeight = 160
-      const menuWidth = 200
-      const spaceBelow = window.innerHeight - rect.bottom
-      const openUp = spaceBelow < menuHeight + 12 && rect.top > menuHeight
-      const left = Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8)
-      const top = openUp ? rect.top - 6 : rect.bottom + 6
-      setCoords({ top, left, openUp })
-    }
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [menuOpen])
-
-  return (
-    <>
-    <div className="row-menu" ref={menuRef}>
-      <button
-        ref={buttonRef}
-        onClick={(event) => {
-          event.stopPropagation()
-          setMenuOpen((value) => !value)
-        }}
-        aria-label="More actions"
-        aria-expanded={menuOpen}
-      >
-        <MoreHorizontal size={18} />
-      </button>
-      {menuOpen && coords && createPortal(
-        <div
-          ref={popoverRef}
-          className="row-menu-popover"
-          style={{
-            position: 'fixed',
-            top: coords.openUp ? undefined : coords.top,
-            bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
-            left: coords.left,
-            right: 'auto',
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {canWrite && <button onClick={() => { setMenuOpen(false); onDuplicate(item) }}><Copy />Duplicate document</button>}
-          {canWrite && <button onClick={() => { setMenuOpen(false); onToggleAbandoned(item) }}>
-            {item.is_abandoned ? <RotateCcw /> : <Ban />}
-            {item.is_abandoned ? 'Restore submission' : 'Abandon submission'}
-          </button>}
-          {canWrite && <button onClick={() => { setMenuOpen(false); onToggleTerminate(item) }}>
-            {item.workflow_terminated ? <RotateCcw /> : <OctagonX />}
-            {item.workflow_terminated ? 'Reopen workflow' : 'Terminate workflow'}
-          </button>}
-          {canDelete && <button
-            className="danger"
-            onClick={() => {
-              setMenuOpen(false)
-              setDeleteOpen(true)
-            }}
-          >
-            <Trash2 />Delete document
-          </button>}
-        </div>,
-        document.body,
-      )}
-    </div>
-    <ConfirmDialog
-      open={deleteOpen}
-      title={`Permanently delete ${item.document_number}?`}
-      description={<>This removes the document from its register and related DocFlow views. <strong>This action cannot be undone.</strong></>}
-      confirmLabel="Delete document"
-      onClose={() => setDeleteOpen(false)}
-      onConfirm={() => onDelete(item)}
-    />
-    </>
-  )
-}
-
-function SortableRow({
-  item, highlighted, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
-  selectionMode, selected, onToggleSelect, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete, onKeyboardMove, canWrite = true, canDelete = true, canReorder = true,
-}: {
-  item: Package
-  highlighted: boolean
-  kind: PageKind
-  configs: ColumnConfig[]
-  submissionSteps: Props['submissionSteps']
-  submissionStepsFor?: Props['submissionStepsFor']
-  feedbackReviewers: Props['feedbackReviewers']
-  feedbackStatusLabels: Props['feedbackStatusLabels']
-  feedbackStatusColors: Props['feedbackStatusColors']
-  selectionMode: boolean
-  selected: boolean
-  onToggleSelect?: (id: number) => void
-  onView: (p: Package) => void
-  onEdit: (p: Package) => void
-  onAdvance: Props['onAdvance']
-  onDuplicate: Props['onDuplicate']
-  onToggleAbandoned: Props['onToggleAbandoned']
-  onToggleTerminate: Props['onToggleTerminate']
-  onDelete: Props['onDelete']
-  onKeyboardMove: (id: number, direction: -1 | 1) => void
-  canWrite?: boolean
-  canDelete?: boolean
-  canReorder?: boolean
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: selectionMode || !canReorder })
-  const style = { transform: CSS.Transform.toString(transform), transition }
-  const primaryField: ColumnField = kind === 'workflow' ? 'workflow_number' : kind === 'transmittal' ? 'transmittal_number' : 'document_number'
-  const first = item[primaryField]
-  const config = (field: ColumnField) => configs.find((entry) => entry.field_name === field)
-  const shown = (field: ColumnField) => {
-    const entry = config(field)
-    return kind === 'documents' ? entry?.is_visible !== false : kind === 'workflow' ? entry?.is_visible_workflow !== false : entry?.is_visible_transmittal !== false
-  }
-  return (
-    <tr
-      ref={setNodeRef}
-      data-package-id={item.id}
-      style={style}
-      className={`${isDragging ? 'dragging' : ''} ${item.has_attachment ? 'has-attachment' : ''} ${item.is_abandoned ? 'abandoned' : ''} ${highlighted ? 'notification-highlight' : ''} ${selected ? 'row-selected' : ''}`}
-      onDoubleClick={() => { if (!selectionMode) onView(item) }}
-    >
-      {selectionMode ? (
-        <td className="select-cell">
-          <label className="row-checkbox">
-            <input type="checkbox" checked={selected} onChange={() => onToggleSelect?.(item.id)} aria-label={`Select ${item.document_number}`} />
-            <i />
-          </label>
-        </td>
-      ) : (
-        <td className="drag-cell">
-          {canReorder ? (
-            <button
-              type="button"
-              disabled={!canReorder}
-              {...attributes}
-              {...listeners}
-              aria-label="Drag to reorder. Use Alt and arrow keys for keyboard reordering."
-              onKeyDown={(event) => {
-                if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
-                event.preventDefault()
-                onKeyboardMove(item.id, event.key === 'ArrowUp' ? -1 : 1)
-              }}
-            ><GripVertical size={16} /></button>
-          ) : null}
-        </td>
-      )}
-      {shown(primaryField) && <td className="identifier-cell" style={styleFor(config(primaryField))}><strong>{first || '—'}</strong></td>}
-      {kind !== 'documents' && shown('document_number') && <td className="identifier-cell" style={styleFor(config('document_number'))}><strong>{item.document_number || '—'}</strong></td>}
-      {shown('document_title') && <td className="document-title-cell" style={styleFor(config('document_title'))}>{item.document_title || '—'}</td>}
-      {shown('document_date') && <td className="mono-cell" style={styleFor(config('document_date'))}>{item.has_attachment ? <span className="attachment-label"><Paperclip /> Attachment</span> : item.document_date}</td>}
-      {shown('document_type') && <td style={styleFor(config('document_type'))}><StatusBadge status={item.document_type} color={columnOptionColorsFor(config('document_type'), item.project_code)[item.document_type]} /></td>}
-      {shown('initiator') && <td style={styleFor(config('initiator'))}><div className="person-cell"><span>{item.initiator.split(' ').map((s) => s[0]).join('').slice(0, 2)}</span>{item.initiator}</div></td>}
-      {shown('discipline') && <td style={styleFor(config('discipline'))}>{item.discipline}</td>}
-      {primaryField !== 'transmittal_number' && shown('transmittal_number') && <td className="mono-cell" style={styleFor(config('transmittal_number'))}>{item.transmittal_number || '—'}</td>}
-      {primaryField !== 'workflow_number' && shown('workflow_number') && <td className="mono-cell" style={styleFor(config('workflow_number'))}>{item.workflow_number || '—'}</td>}
-      {shown('submission_progress') && <td className="progress-cell" style={styleFor(config('submission_progress'))}><ProgressTrack steps={submissionStepsFor?.(item.project_code) || submissionSteps} values={item.submission_progress} disabled={item.is_abandoned} onAdvance={canWrite && onAdvance ? () => onAdvance(item) : undefined} /></td>}
-      {shown('feedback') && <td className="progress-cell feedback" style={styleFor(config('feedback'))}><FeedbackStatus item={item} reviewers={feedbackReviewers} statusLabels={feedbackStatusLabels} statusColors={feedbackStatusColors} compact /></td>}
-      <td className="action-cell">
-        <button onClick={(event) => { event.stopPropagation(); onView(item) }} aria-label="View document"><Eye size={17} /></button>
-        {canWrite && <button onClick={(event) => { event.stopPropagation(); onEdit(item) }} aria-label="Edit document"><Pencil size={16} /></button>}
-        {(canWrite || canDelete) && <RowMenu item={item} onDuplicate={onDuplicate} onToggleAbandoned={onToggleAbandoned} onToggleTerminate={onToggleTerminate} onDelete={onDelete} canWrite={canWrite} canDelete={canDelete} />}
-      </td>
-    </tr>
-  )
-}
+const registerCollision: CollisionDetection = args => closestCenter({
+  ...args,
+  droppableContainers: args.droppableContainers.filter(container => container.data.current?.type === args.active.data.current?.type),
+})
 
 export function PackageTable({
   items, highlightedPackageId, kind, configs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors,
   sortBy, sortOrder, selectionMode = false, selectedIds, onToggleSelect, onToggleSelectAll,
-  onSort, onColumnResize, onView, onEdit, onReorder, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete,
+  onSort, onColumnResize, onColumnVisibilityChange, columnOrder = [], onColumnOrderChange, columnVisibilitySaving = false, columnVisibilityReady = true,
+  onView, onEdit, onReorder, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete,
   canWrite = true, canDelete = true, canWriteProject, canDeleteProject,
 }: Props) {
   const [widths, setWidths] = useState<Record<string, number>>({})
+  const [columnMenu, setColumnMenu] = useState<ColumnMenuAnchor | null>(null)
+  const columnButtonRef = useRef<HTMLButtonElement>(null)
+  const columnTriggerRef = useRef<HTMLElement | null>(null)
+  const pendingHeaderFocusRef = useRef<HTMLElement | null>(null)
+  const columnMenuId = useId()
   useEffect(() => setWidths(Object.fromEntries(configs.map((item) => [item.field_name, item.column_width]))), [configs])
   const layoutConfigs = useMemo(() => configs.filter(item => item.field_name !== 'number_of_documents').map((item) => ({ ...item, column_width: widths[item.field_name] ?? item.column_width })), [configs, widths])
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const ids = useMemo(() => items.map((i) => i.id), [items])
+  const rowIds = useMemo(() => ids.map(id => `row:${id}`), [ids])
   const canReorder = canWrite && items.every(item => !canWriteProject || canWriteProject(item.project_code))
   const allSelected = items.length > 0 && items.every((item) => selectedIds?.has(item.id))
   const someSelected = items.some((item) => selectedIds?.has(item.id)) && !allSelected
   const dragEnd = ({ active, over }: DragEndEvent) => {
+    if (active.data.current?.type === 'column') {
+      if (!canMoveColumns || !over || active.id === over.id) return
+      const field = active.data.current.field as RegisterColumnField
+      const target = over.data.current?.field as RegisterColumnField
+      if (visibleFields.includes(field) && visibleFields.includes(target)) saveColumnOrder(moveVisibleRegisterColumn(orderedFields, visibleFields, field, target), field)
+      return
+    }
     if (!canReorder || selectionMode || !over || active.id === over.id) return
-    const from = ids.indexOf(Number(active.id))
-    const to = ids.indexOf(Number(over.id))
+    const from = ids.indexOf(Number(String(active.id).slice(4)))
+    const to = ids.indexOf(Number(String(over.id).slice(4)))
+    if (from < 0 || to < 0) return
     const next = [...ids]
     next.splice(to, 0, next.splice(from, 1)[0])
     onReorder(next)
@@ -332,84 +90,166 @@ export function PackageTable({
     ;[next[from], next[to]] = [next[to], next[from]]
     onReorder(next)
   }
-  const primary = kind === 'workflow' ? ['Workflow Number', 'workflow_number'] : kind === 'transmittal' ? ['Transmittal Number', 'transmittal_number'] : ['Document Number', 'document_number']
-  const primaryField = primary[1] as ColumnField
-  const config = (field: ColumnField) => layoutConfigs.find((item) => item.field_name === field)
-  const shown = (field: ColumnField) => {
-    const item = config(field)
-    return kind === 'documents' ? item?.is_visible !== false : kind === 'workflow' ? item?.is_visible_workflow !== false : item?.is_visible_transmittal !== false
+  const primaryField = primaryRegisterColumn(kind)
+  const columnChoices = registerColumns(kind, layoutConfigs, columnOrder)
+  const visibleColumns = columnChoices.filter(column => column.visible)
+  const orderedFields = columnChoices.map(column => column.field)
+  const visibleFields = visibleColumns.map(column => column.field)
+  const canMoveColumns = columnVisibilityReady && !columnVisibilitySaving
+  const saveColumnOrder = (order: RegisterColumnField[], focusField?: RegisterColumnField) => {
+    if (!canMoveColumns) return
+    pendingHeaderFocusRef.current = focusField ? document.querySelector<HTMLElement>(`th[data-column-field="${focusField}"] .column-drag-handle`) : null
+    onColumnOrderChange(order)
   }
-  const label = (field: ColumnField, fallback: string) => config(field)?.display_name || fallback
+  const moveColumn = (field: RegisterColumnField, direction: -1 | 1) => {
+    const index = visibleFields.indexOf(field)
+    const target = visibleFields[index + direction]
+    if (index >= 0 && target) saveColumnOrder(moveVisibleRegisterColumn(orderedFields, visibleFields, field, target), field)
+  }
+  useLayoutEffect(() => {
+    if (columnVisibilitySaving || !pendingHeaderFocusRef.current) return
+    const control = pendingHeaderFocusRef.current
+    if (control.isConnected && document.activeElement === document.body) control.focus({ preventScroll: true })
+    pendingHeaderFocusRef.current = null
+  }, [columnVisibilitySaving, columnOrder])
+  const closeColumnMenu = (restoreFocus = true) => {
+    setColumnMenu(null)
+    if (restoreFocus) {
+      const trigger = columnTriggerRef.current
+      ;(trigger?.isConnected ? trigger : columnButtonRef.current)?.focus({ preventScroll: true })
+    }
+  }
+  const openHeaderColumns = (target: HTMLElement, x: number, y: number) => {
+    const header = target.closest<HTMLTableCellElement>('th')
+    columnTriggerRef.current = header?.querySelector<HTMLButtonElement>('button') || (header?.tabIndex === 0 ? header : columnButtonRef.current)
+    setColumnMenu({ x, y, field: header?.dataset.columnField as ColumnField | undefined })
+  }
   const resize = (field: ColumnField, width: number, commit = false) => {
     setWidths((previous) => ({ ...previous, [field]: width }))
     if (commit) onColumnResize(field, width)
   }
-  const configuredWidth = layoutConfigs
-    .filter((item) => (kind === 'documents' ? item.is_visible : kind === 'workflow' ? item.is_visible_workflow : item.is_visible_transmittal))
-    .reduce((total, item) => total + item.column_width, 110)
+  const configuredWidth = visibleColumns.reduce((total, column) => total + (column.config?.column_width || 0), 110)
   const visibilityKey = layoutConfigs
     .map((item) => `${item.field_name}:${item.column_width}:${item.is_visible}:${item.is_visible_workflow}:${item.is_visible_transmittal}`)
     .join('|')
   return (
-    <SyncedHorizontalScroll
-      deps={[configuredWidth, visibilityKey, items.length, selectionMode, kind]}
-      aria-label="Document register table"
-    >
-      <DndContext sensors={sensors} onDragEnd={dragEnd}>
-        <table className="package-table configurable-table" style={{ width: configuredWidth, minWidth: '100%' }}>
-          <caption className="sr-only">Document register</caption>
-          <thead>
-            <tr>
-              {selectionMode ? (
-                <th className="select-cell" scope="col">
-                  <label className="row-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => { if (el) el.indeterminate = someSelected }}
-                      onChange={() => onToggleSelectAll?.()}
-                      aria-label="Select all documents on this page"
-                    />
-                    <i />
-                  </label>
-                </th>
-              ) : (
-                <th className="drag-cell" scope="col"><span className="sr-only">Reorder</span></th>
-              )}
-              {shown(primaryField) && <Header label={label(primaryField, primary[0])} field={primaryField} config={config(primaryField)} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {kind !== 'documents' && shown('document_number') && <Header label={label('document_number', 'Document Number')} field="document_number" config={config('document_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('document_title') && <Header label={label('document_title', 'Document Title')} field="document_title" config={config('document_title')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('document_date') && <Header label={label('document_date', 'Date')} field="document_date" config={config('document_date')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('document_type') && <Header label={label('document_type', 'Document Type')} field="document_type" config={config('document_type')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('initiator') && <Header label={label('initiator', 'Initiator')} field="initiator" config={config('initiator')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('discipline') && <Header label={label('discipline', 'Discipline')} field="discipline" config={config('discipline')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {primaryField !== 'transmittal_number' && shown('transmittal_number') && <Header label={label('transmittal_number', 'Transmittal No.')} field="transmittal_number" config={config('transmittal_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {primaryField !== 'workflow_number' && shown('workflow_number') && <Header label={label('workflow_number', 'Workflow No.')} field="workflow_number" config={config('workflow_number')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('submission_progress') && <Header label={label('submission_progress', 'Submission Progress')} config={config('submission_progress')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              {shown('feedback') && <Header label={label('feedback', 'Feedback')} config={config('feedback')} onResize={resize} {...{ sortBy, sortOrder, onSort }} />}
-              <th scope="col"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            <tbody>
-              {items.map((item) => (
-                <SortableRow
-                  key={item.id}
-                  highlighted={item.id === highlightedPackageId}
-                  selectionMode={selectionMode}
-                  selected={!!selectedIds?.has(item.id)}
-                  onToggleSelect={onToggleSelect}
-                  onKeyboardMove={keyboardMove}
-                  {...{ item, kind, configs: layoutConfigs, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete }}
-                  canWrite={canWrite && (!canWriteProject || canWriteProject(item.project_code))}
-                  canDelete={canDelete && (!canDeleteProject || canDeleteProject(item.project_code))}
-                  canReorder={canReorder}
-                />
-              ))}
-            </tbody>
-          </SortableContext>
-        </table>
-      </DndContext>
-    </SyncedHorizontalScroll>
+    <>
+      <div className="column-visibility-toolbar">
+        <span>Drag column handles to reorder. Right-click a heading to choose columns.</span>
+        <button
+          type="button"
+          ref={columnButtonRef}
+          className="secondary-button"
+          aria-haspopup="dialog"
+          aria-expanded={!!columnMenu}
+          aria-controls={columnMenu ? columnMenuId : undefined}
+          onClick={event => {
+            if (columnMenu) { closeColumnMenu(); return }
+            const rect = event.currentTarget.getBoundingClientRect()
+            columnTriggerRef.current = event.currentTarget
+            setColumnMenu({ x: rect.right - 300, y: rect.bottom + 6 })
+          }}
+        ><Columns3 size={16} aria-hidden="true" />Columns</button>
+      </div>
+      {columnMenu && (
+        <PackageColumnChooser
+          id={columnMenuId}
+          anchor={columnMenu}
+          choices={columnChoices}
+          ready={columnVisibilityReady}
+          saving={columnVisibilitySaving}
+          orderCustomized={columnOrder.length > 0}
+          buttonRef={columnButtonRef}
+          onChange={onColumnVisibilityChange}
+          onOrderChange={saveColumnOrder}
+          onClose={closeColumnMenu}
+        />
+      )}
+      <SyncedHorizontalScroll
+        deps={[configuredWidth, visibilityKey, orderedFields.join('|'), items.length, selectionMode, kind]}
+        aria-label="Document register table"
+      >
+        <DndContext
+          sensors={sensors}
+          collisionDetection={registerCollision}
+          onDragEnd={dragEnd}
+          accessibility={{ screenReaderInstructions: { draggable: 'To move a column, focus its handle and use Alt plus Left or Right arrow keys. To move a document row, focus its handle and use Alt plus Up or Down arrow keys.' } }}
+        >
+          <table className="package-table configurable-table" style={{ width: configuredWidth, minWidth: '100%' }}>
+            <caption className="sr-only">Document register</caption>
+            <thead
+              onContextMenu={event => {
+                event.preventDefault()
+                openHeaderColumns(event.target as HTMLElement, event.clientX, event.clientY)
+              }}
+              onKeyDown={event => {
+                if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+                event.preventDefault()
+                const target = event.target as HTMLElement
+                const rect = target.getBoundingClientRect()
+                openHeaderColumns(target, rect.left, rect.bottom + 6)
+              }}
+            >
+              <SortableContext items={visibleFields.map(field => `column:${field}`)} strategy={horizontalListSortingStrategy}>
+              <tr>
+                {selectionMode ? (
+                  <th className="select-cell" scope="col">
+                    <label className="row-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected }}
+                        onChange={() => onToggleSelectAll?.()}
+                        aria-label="Select all documents on this page"
+                      />
+                      <i />
+                    </label>
+                  </th>
+                ) : (
+                  <th className="drag-cell" scope="col"><span className="sr-only">Reorder</span></th>
+                )}
+                {visibleColumns.map(choice => (
+                  <PackageColumnHeader
+                    key={choice.field}
+                    label={choice.label}
+                    columnField={choice.field}
+                    field={choice.field === 'submission_progress' || choice.field === 'feedback' ? undefined : choice.field}
+                    config={choice.config}
+                    onResize={resize}
+                    orderReady={canMoveColumns}
+                    onMove={moveColumn}
+                    onChooseColumns={target => {
+                      const rect = target.getBoundingClientRect()
+                      openHeaderColumns(target, rect.left, rect.bottom + 6)
+                    }}
+                    {...{ sortBy, sortOrder, onSort }}
+                  />
+                ))}
+                <th scope="col"><span className="sr-only">Actions</span></th>
+              </tr>
+              </SortableContext>
+            </thead>
+            <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {items.map((item) => (
+                  <PackageTableRow
+                    key={item.id}
+                    highlighted={item.id === highlightedPackageId}
+                    selectionMode={selectionMode}
+                    selected={!!selectedIds?.has(item.id)}
+                    onToggleSelect={onToggleSelect}
+                    onKeyboardMove={keyboardMove}
+                    {...{ item, columns: visibleColumns, primaryField, submissionSteps, submissionStepsFor, feedbackReviewers, feedbackStatusLabels, feedbackStatusColors, onView, onEdit, onAdvance, onDuplicate, onToggleAbandoned, onToggleTerminate, onDelete }}
+                    canWrite={canWrite && (!canWriteProject || canWriteProject(item.project_code))}
+                    canDelete={canDelete && (!canDeleteProject || canDeleteProject(item.project_code))}
+                    canReorder={canReorder}
+                  />
+                ))}
+              </tbody>
+            </SortableContext>
+          </table>
+        </DndContext>
+      </SyncedHorizontalScroll>
+    </>
   )
 }

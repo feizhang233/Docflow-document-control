@@ -208,7 +208,7 @@ export function SettingsPage() {
           <span><ListFilter/></span>
           <div>
             <h2>Column settings</h2>
-            <p>{columnRegister==='documents'?'Edit Document column names, visibility, width and metadata options.':'Choose which columns are visible on this register. Names, labels and field types are read-only here.'}</p>
+            <p>{columnRegister==='documents'?'Edit shared column names, default visibility, width and metadata options.':'Choose default column visibility for this register. Names, labels and field types are read-only here.'} Personal visibility and order are saved separately in each register.</p>
           </div>
           <div className="column-settings-actions">
             <small>{visibleCount} of {configs.data?.length||0} visible</small>

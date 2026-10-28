@@ -1,9 +1,9 @@
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
-from app.core.security import ACCESS_COOKIE, decode_jwt
+from app.core.security import ACCESS_COOKIE, decode_session_token, utcnow
 from app.db.session import get_db
-from app.models.iam import User
+from app.models.iam import RefreshToken, User
 
 
 def client_ip(request: Request) -> str | None:
@@ -25,19 +25,19 @@ def get_current_user(
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        payload = decode_jwt(token)
-    except InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if payload.get("typ") != "access":
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        user_id = int(payload.get("sub"))
-    except (TypeError, ValueError):
+        payload, user_id, session_id = decode_session_token(token, "access")
+        if session_id is None:
+            raise InvalidTokenError("Missing session ID")
+        session_version = int(payload.get("sv") or 0)
+    except (InvalidTokenError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Not authenticated")
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if int(payload.get("sv") or 0) != user.session_version:
+    if session_version != user.session_version:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    session = db.get(RefreshToken, session_id)
+    if not session or session.user_id != user_id or session.revoked_at or session.expires_at <= utcnow():
         raise HTTPException(status_code=401, detail="Not authenticated")
     request.state.user = user
     request.state.client_ip = client_ip(request)

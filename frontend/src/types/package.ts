@@ -99,6 +99,20 @@ export interface ColumnConfig {
 export type InputColumnField = keyof Pick<Package, 'document_number'|'document_title'|'document_date'|'document_type'|'initiator'|'discipline'|'number_of_documents'|'transmittal_number'|'workflow_number'>
 export type ColumnField = InputColumnField | 'submission_progress' | 'feedback'
 
+export type RegisterColumnField = Exclude<ColumnField, 'number_of_documents'>
+export type ColumnVisibility = Partial<Record<RegisterColumnField, boolean>>
+
+export interface ColumnPreferencesPatch {
+  visibility?: ColumnVisibility
+  column_order?: RegisterColumnField[]
+}
+
+export interface AccountColumnPreferences {
+  register: PageKind
+  visibility: ColumnVisibility
+  column_order: RegisterColumnField[]
+}
+
 export interface MetadataBackup {
   format_version: '1.0'
   exported_at: string

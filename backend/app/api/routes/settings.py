@@ -1,10 +1,12 @@
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.auth import get_current_user, require_permission, require_workspace_write
 from app.db.session import get_db
 from app.models.iam import User
+from app.schemas.column_preferences import ColumnPreferencesRead, ColumnPreferencesUpdate, ColumnRegister
 from app.schemas.settings import ColumnConfigRead, ColumnConfigUpdate, ColumnVisibilityUpdate, CsvMetadataImport, MetadataExport, MetadataImport, MetadataImportResult, ProjectConfigRead, ProjectConfigUpdate, WorkflowConfigRead, WorkflowConfigUpdate
+from app.services.column_preferences_service import ColumnPreferencesService
 from app.services.settings_service import SettingsService
 
 router = APIRouter(tags=["settings"])
@@ -12,6 +14,20 @@ router = APIRouter(tags=["settings"])
 def _require_all_projects(user: User):
     if user.allowed_projects() is not None:
         raise HTTPException(status_code=403, detail="Metadata backup is limited to users with access to all projects")
+
+def _assert_personal_account(user: User, expected_account_id: int | None):
+    if expected_account_id is not None and expected_account_id != user.id:
+        raise HTTPException(status_code=409, detail="Your account changed. Reload this page to use column settings for the current account.")
+
+@router.get("/settings/me/columns", response_model=ColumnPreferencesRead)
+def get_personal_column_preferences(register: ColumnRegister = Query(...), expected_account_id: int | None = Header(default=None, alias="X-Account-ID"), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _assert_personal_account(user, expected_account_id)
+    return ColumnPreferencesService(db).read(user.id, register)
+
+@router.put("/settings/me/columns", response_model=ColumnPreferencesRead)
+def update_personal_column_preferences(data: ColumnPreferencesUpdate, register: ColumnRegister = Query(...), expected_account_id: int | None = Header(default=None, alias="X-Account-ID"), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _assert_personal_account(user, expected_account_id)
+    return ColumnPreferencesService(db).update(user.id, register, data)
 
 @router.get("/settings/columns", response_model=list[ColumnConfigRead])
 def list_column_configs(db: Session = Depends(get_db), _: User = Depends(get_current_user)): return SettingsService(db).list_configs()
